@@ -47,6 +47,9 @@ public struct AppSourceDefinition: Codable, Sendable, Equatable {
     public var releaseDatePath: String?
     /// Download URL; `{version}` is replaced with the version found.
     public var downloadURL: String?
+    /// Dot path to the download URL in a JSON response, for feeds whose download names can't be
+    /// worked out from the version (`releases.0.updateTo.url`).
+    public var downloadPath: String?
     /// The Apple Team ID the app must be signed with. Recommended for every custom source.
     public var expectedTeamIdentifier: String?
     /// Squirrel: the release channel (`stable`, `insider`).
@@ -56,8 +59,8 @@ public struct AppSourceDefinition: Codable, Sendable, Equatable {
 
     public init(bundleIdentifier: String, kind: SourceKind, feedURL: String? = nil, repository: String? = nil,
                 assetPattern: String? = nil, versionPath: String? = nil, versionPattern: String? = nil,
-                releaseDatePath: String? = nil, downloadURL: String? = nil, expectedTeamIdentifier: String? = nil,
-                channel: String? = nil, note: String? = nil) {
+                releaseDatePath: String? = nil, downloadURL: String? = nil, downloadPath: String? = nil,
+                expectedTeamIdentifier: String? = nil, channel: String? = nil, note: String? = nil) {
         self.bundleIdentifier = bundleIdentifier
         self.kind = kind
         self.feedURL = feedURL
@@ -67,6 +70,7 @@ public struct AppSourceDefinition: Codable, Sendable, Equatable {
         self.versionPattern = versionPattern
         self.releaseDatePath = releaseDatePath
         self.downloadURL = downloadURL
+        self.downloadPath = downloadPath
         self.expectedTeamIdentifier = expectedTeamIdentifier
         self.channel = channel
         self.note = note
@@ -82,6 +86,7 @@ public struct AppSourceDefinition: Codable, Sendable, Equatable {
         static let versionPattern = "VersionPattern"
         static let releaseDatePath = "ReleaseDatePath"
         static let downloadURL = "DownloadURL"
+        static let downloadPath = "DownloadPath"
         static let expectedTeamIdentifier = "ExpectedTeamIdentifier"
         static let channel = "Channel"
         static let note = "Note"
@@ -104,7 +109,8 @@ public struct AppSourceDefinition: Codable, Sendable, Equatable {
         self.init(bundleIdentifier: id, kind: kind, feedURL: try string(Key.feedURL), repository: try string(Key.repository),
                   assetPattern: try string(Key.assetPattern), versionPath: try string(Key.versionPath),
                   versionPattern: try string(Key.versionPattern), releaseDatePath: try string(Key.releaseDatePath),
-                  downloadURL: try string(Key.downloadURL), expectedTeamIdentifier: try string(Key.expectedTeamIdentifier),
+                  downloadURL: try string(Key.downloadURL), downloadPath: try string(Key.downloadPath),
+                  expectedTeamIdentifier: try string(Key.expectedTeamIdentifier),
                   channel: try string(Key.channel), note: try string(Key.note))
         try validate()
     }
@@ -120,8 +126,8 @@ public struct AppSourceDefinition: Codable, Sendable, Equatable {
                 throw BarkeepError(.usage, "GitHub needs \(Key.repository) as owner/repo")
             }
         case .json:
-            guard feedURL != nil, downloadURL != nil, versionPath != nil || versionPattern != nil else {
-                throw BarkeepError(.usage, "JSON needs \(Key.feedURL), \(Key.downloadURL) and \(Key.versionPath) or \(Key.versionPattern)")
+            guard feedURL != nil, (downloadURL != nil) != (downloadPath != nil), versionPath != nil || versionPattern != nil else {
+                throw BarkeepError(.usage, "JSON needs \(Key.feedURL), \(Key.downloadURL) or \(Key.downloadPath) (not both), and \(Key.versionPath) or \(Key.versionPattern)")
             }
         case .appStore, .vendor, .none: break
         }

@@ -106,6 +106,10 @@ public struct Configuration: Sendable, Equatable, Codable {
 
     /// Where values came from (for `show-config`).
     public var sources: [String] = ["defaults"]
+    /// Keys the configuration profile sets, which can't be changed on the Mac.
+    public var managedKeys: Set<String> = []
+    /// Keys changed on this Mac (`LocalSettings`) and not overridden by the profile.
+    public var localKeys: Set<String> = []
 
     public init() {}
 
@@ -159,37 +163,37 @@ public struct Configuration: Sendable, Equatable, Codable {
     // MARK: Keys
 
     public enum Key {
-        static let excludedBundleIdentifiers = "ExcludedBundleIdentifiers"
-        static let includedBundleIdentifiers = "IncludedBundleIdentifiers"
-        static let scanPaths = "ScanPaths"
-        static let allowedTeamIdentifiers = "AllowedTeamIdentifiers"
-        static let appSources = "AppSources"
-        static let appSettings = "AppSettings"
-        static let coolingOffHours = "CoolingOffHours"
-        static let deadlineDays = "DeadlineDays"
-        static let deadlineBasis = "DeadlineBasis"
-        static let enforceDeadlines = "EnforceDeadlines"
-        static let deadlineGraceMinutes = "DeadlineGraceMinutes"
-        static let forceQuitAtDeadline = "ForceQuitAtDeadline"
-        static let relaunchAfterUpdate = "RelaunchAfterUpdate"
-        static let checkIntervalMinutes = "CheckIntervalMinutes"
-        static let requireGatekeeperAssessment = "RequireGatekeeperAssessment"
-        static let allowPackageInstallers = "AllowPackageInstallers"
-        static let maximumDownloadSizeMB = "MaximumDownloadSizeMB"
-        static let allowUnverifiedSignatures = "AllowUnverifiedSignatures"
-        static let allowFileURLs = "AllowFileURLs"
-        static let notifyUsers = "NotifyUsers"
-        static let notifyBeforeDeadlineHours = "NotifyBeforeDeadlineHours"
-        static let allowUserInitiatedUpdates = "AllowUserInitiatedUpdates"
-        static let showInMenuBar = "ShowInMenuBar"
-        static let openAtLogin = "OpenAtLogin"
-        static let automaticSelfUpdates = "AutomaticSelfUpdates"
-        static let selfUpdateDeferralDays = "SelfUpdateDeferralDays"
-        static let logFilePath = "LogFilePath"
+        public static let excludedBundleIdentifiers = "ExcludedBundleIdentifiers"
+        public static let includedBundleIdentifiers = "IncludedBundleIdentifiers"
+        public static let scanPaths = "ScanPaths"
+        public static let allowedTeamIdentifiers = "AllowedTeamIdentifiers"
+        public static let appSources = "AppSources"
+        public static let appSettings = "AppSettings"
+        public static let coolingOffHours = "CoolingOffHours"
+        public static let deadlineDays = "DeadlineDays"
+        public static let deadlineBasis = "DeadlineBasis"
+        public static let enforceDeadlines = "EnforceDeadlines"
+        public static let deadlineGraceMinutes = "DeadlineGraceMinutes"
+        public static let forceQuitAtDeadline = "ForceQuitAtDeadline"
+        public static let relaunchAfterUpdate = "RelaunchAfterUpdate"
+        public static let checkIntervalMinutes = "CheckIntervalMinutes"
+        public static let requireGatekeeperAssessment = "RequireGatekeeperAssessment"
+        public static let allowPackageInstallers = "AllowPackageInstallers"
+        public static let maximumDownloadSizeMB = "MaximumDownloadSizeMB"
+        public static let allowUnverifiedSignatures = "AllowUnverifiedSignatures"
+        public static let allowFileURLs = "AllowFileURLs"
+        public static let notifyUsers = "NotifyUsers"
+        public static let notifyBeforeDeadlineHours = "NotifyBeforeDeadlineHours"
+        public static let allowUserInitiatedUpdates = "AllowUserInitiatedUpdates"
+        public static let showInMenuBar = "ShowInMenuBar"
+        public static let openAtLogin = "OpenAtLogin"
+        public static let automaticSelfUpdates = "AutomaticSelfUpdates"
+        public static let selfUpdateDeferralDays = "SelfUpdateDeferralDays"
+        public static let logFilePath = "LogFilePath"
 
         // AppSettings entries
-        static let excluded = "Excluded"
-        static let enforceDeadline = "EnforceDeadline"
+        public static let excluded = "Excluded"
+        public static let enforceDeadline = "EnforceDeadline"
     }
 
     /// Applies keys from a preferences dictionary. Unknown keys are ignored; keys with the wrong
@@ -370,17 +374,30 @@ public struct ConfigurationLoader: Sendable {
     }
 
     public var devicePath: String { "\(managedPreferencesDirectory)/\(Configuration.domain).plist" }
+    public var localSettingsPath = LocalSettings.path
 
-    /// Precedence (lowest to highest): built-in defaults, the device-scoped profile, then
-    /// `overrideFile` (only honoured for root; see the CLI). Barkeep works for the whole Mac, so
-    /// user-scoped profiles are not read.
+    /// Precedence (lowest to highest): built-in defaults, settings changed on this Mac, the
+    /// device-scoped profile, then `overrideFile` (only honoured for root; see the CLI). Barkeep
+    /// works for the whole Mac, so user-scoped profiles are not read.
     public func load(overrideFile: String? = nil) -> (Configuration, [String]) {
         var config = Configuration()
         var warnings: [String] = []
+        switch readTrusted(localSettingsPath) {
+        case .missing: break
+        case .rejected(let why): warnings.append("Ignoring \(localSettingsPath): \(why)")
+        case .loaded(let dict):
+            // Only what can be changed on the Mac counts, whoever wrote the file.
+            let editable = dict.filter { LocalSettings.editableKeys.contains($0.key) }
+            warnings += config.apply(editable, source: localSettingsPath)
+            config.localKeys = Set(editable.keys)
+        }
         switch readTrusted(devicePath) {
         case .missing: break
         case .rejected(let why): warnings.append("Ignoring \(devicePath): \(why)")
-        case .loaded(let dict): warnings += config.apply(dict, source: devicePath)
+        case .loaded(let dict):
+            warnings += config.apply(dict, source: devicePath)
+            config.managedKeys = Set(dict.keys)
+            config.localKeys.subtract(config.managedKeys)
         }
         if let overrideFile {
             switch Self.readPlist(overrideFile) {

@@ -66,7 +66,7 @@ this order:
 |---|---|---|
 | **Your profile** | `AppSources` | Whatever you tell it (any type below). Always wins. |
 | **Mac App Store** | `Contents/_MASReceipt` | The App Store's version, for reporting. The App Store (or your MDM's VPP) installs it. |
-| **barkeep's catalog** | Bundle ID | Built-in sources for Chrome, Firefox, Zoom, Slack, Discord, Docker Desktop and VS Code, each pinned to the vendor's Team ID. |
+| **barkeep's catalog** | Bundle ID | Built-in sources for Chrome, Firefox, Zoom, Slack, Discord, Docker Desktop, VS Code, ChatGPT, Claude, Tailscale, Obsidian, UTM, balenaEtcher, Thonny, Bambu Studio, Raspberry Pi Imager, Mullvad Browser and Decant, each pinned to the vendor's Team ID. |
 | **Sparkle** | `SUFeedURL` in Info.plist | The appcast, with the EdDSA signature the app's `SUPublicEDKey` expects. Skips beta channels, informational items, deltas and items for newer macOS. |
 | **Squirrel (VS Code style)** | `updateUrl` in `Resources/app/product.json` | `<updateUrl>/api/update/darwin-arm64/<quality>/latest`, with its SHA-256. Covers VS Code and its relatives. |
 | **electron-builder** | `Resources/app-update.yml` | `latest-mac.yml` from GitHub, a generic URL or S3, with its SHA-512 and release date. |
@@ -94,7 +94,7 @@ Each entry needs `BundleIdentifier` and `Type`, and should have `ExpectedTeamIde
 | `ElectronBuilder` | `FeedURL` or `Repository` | The folder holding `latest-mac.yml`, or a GitHub `owner/repo`. `Channel` picks `<channel>-mac.yml`. |
 | `Squirrel` | `FeedURL` | The update server; `Channel` is the quality (default `stable`). |
 | `GitHub` | `Repository` | The newest non-prerelease release. `AssetPattern` (a regular expression) picks the file; otherwise barkeep prefers arm64, then universal, Mac `.dmg`/`.zip`/`.pkg` files. GitHub's published asset digest is checked. |
-| `JSON` | `FeedURL`, `DownloadURL`, and `VersionPath` or `VersionPattern` | Any URL that says what's newest. `VersionPath` is a dot path into JSON (`releases.0.version`); `VersionPattern` a regular expression whose first group is the version, for HTML or XML. `ReleaseDatePath` is optional. `{version}` in `DownloadURL` is replaced. |
+| `JSON` | `FeedURL`, `DownloadURL` or `DownloadPath`, and `VersionPath` or `VersionPattern` | Any URL that says what's newest. `VersionPath` is a dot path into JSON (`releases.0.version`); `VersionPattern` a regular expression whose first group is the version, for HTML or XML. `ReleaseDatePath` is optional. `{version}` in `DownloadURL` is replaced. When the download's name can't be worked out from the version, use `DownloadPath` instead: a dot path to the download URL in the same JSON (`releases.0.updateTo.url`). Use one or the other, not both. |
 | `AppStore` | — | Report only. |
 | `Vendor` | — | Report only; `Note` says which updater. |
 | `None` | — | Leave the app alone. |
@@ -170,6 +170,13 @@ doubling up to a day.
 Settings come from a configuration profile with PayloadType `uk.street365.barkeep`, which users
 can't change. Every key is optional. barkeep reads the device profile only; it acts for the whole
 Mac.
+
+On a Mac without a profile, or for keys the profile leaves out, an administrator can change
+settings in Barkeep.app (Settings…, then Unlock with an administrator's name and password). The
+daemon saves them in `/Library/Application Support/uk.street365.barkeep/Settings.plist`. The
+profile always wins: a key it sets is locked in the window and ignored in that file. `AppSources`,
+`AppSettings`, `LogFilePath`, `AllowUnverifiedSignatures` and `AllowFileURLs` can only come from a
+profile. `barkeep show-config` lists where each value came from.
 
 ### Which apps
 
@@ -316,6 +323,8 @@ Barkeep.app is started in every user's session at login by a LaunchAgent, unless
   standard user sees the apps outside home folders and those in their own; administrators see
   every user's);
 - lets users update an app now, or check for updates, if `AllowUserInitiatedUpdates` allows;
+- shows every setting in its Settings window, and lets an administrator change the ones the
+  profile doesn't set (see [Settings](#settings));
 - runs the launch guard, asks apps to quit at their deadline, reopens them afterwards and posts the
   notifications.
 
@@ -416,8 +425,8 @@ on their own. Turn `AutomaticSelfUpdates` off to ship barkeep through your MDM i
 sudo barkeep uninstall
 ```
 
-removes the command, Barkeep.app, the daemon and agent, the state folder, the log and the package
-receipt. `--dry-run` lists what would go. Apps barkeep updated stay as they are.
+removes the command, Barkeep.app, the daemon and agent, the state folder (with any settings
+changed on the Mac), the log, the settings authorization right and the package receipt. `--dry-run` lists what would go. Apps barkeep updated stay as they are.
 
 ## Licence
 

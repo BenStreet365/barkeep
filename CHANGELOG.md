@@ -3,6 +3,26 @@
 Release notes for barkeep. The release workflow publishes the section for each version as its
 GitHub Release notes, so write them for admins.
 
+## 0.1.1
+
+### Added
+
+- The Settings window shows every setting. Settings the configuration profile sets are locked;
+  an administrator can change the rest for the Mac, with their name and password. They are saved
+  in `/Library/Application Support/uk.street365.barkeep/Settings.plist`, and the profile always
+  wins over them.
+- Catalog sources for ChatGPT, Claude, Tailscale, Obsidian, UTM, balenaEtcher, Thonny,
+  Bambu Studio, Raspberry Pi Imager, Mullvad Browser and Decant.
+- `DownloadPath` for `JSON` sources: a dot path to the download URL in the feed, for downloads
+  whose names can't be worked out from the version.
+
+### Fixed
+
+- The Settings window opened empty.
+- Sparkle feeds whose download links are relative to the feed (Tailscale's) now work.
+- Versions that start with "v" (Raspberry Pi Imager's `v2.0.12`) now compare correctly, so their
+  updates are found.
+
 ## 0.1.0
 
 ### Added

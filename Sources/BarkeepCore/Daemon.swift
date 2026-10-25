@@ -10,6 +10,9 @@ public enum DaemonRequest: Codable, Sendable {
     case checkNow
     /// Update one app now, by path.
     case updateNow(path: String)
+    /// Change one setting on this Mac (nil: back to the default). `authorization` is Barkeep.app's
+    /// `AuthorizationExternalForm`, which must hold `SettingsAuthorization.right`.
+    case changeSetting(key: String, value: LocalSettings.Value?, authorization: Data)
 }
 
 public struct DaemonReply: Codable, Sendable {
@@ -80,6 +83,8 @@ public final class Daemon: @unchecked Sendable {
     let helperExecutable: String?
     let version: String
     let work = DispatchQueue(label: "\(Configuration.domain).work")
+    /// Settings changes one at a time, so two can't overwrite each other.
+    let settings = DispatchQueue(label: "\(Configuration.domain).settings")
     private var lastSelfUpdate: Date?
     private let startedFrom: FileIdentity?
 
@@ -170,6 +175,21 @@ public final class Daemon: @unchecked Sendable {
             }
             guard let record = state.record(forPath: standard) else { return notManaged }
             return DaemonReply(ok: record.status != .failed, message: record.message, record: record)
+        case .changeSetting(let key, let value, let authorization):
+            // The password, not just the account: a process running as an administrator can't
+            // change root's policy without it.
+            guard uid == 0 || SettingsAuthorization.verify(authorization) else {
+                return DaemonReply(ok: false, message: "An administrator's name and password are needed to change settings")
+            }
+            do {
+                try settings.sync { try LocalSettings.set(key, to: value, managedKeys: config.managedKeys) }
+            } catch {
+                return DaemonReply(ok: false, message: "\(error)")
+            }
+            log.info("A user (uid \(uid)) changed \(key) to \(value.map { "\($0.plist)" } ?? "its default")")
+            // Saved again with the new settings, which Barkeep.app reads from the state.
+            work.async { [self] in tick() }
+            return DaemonReply(ok: true, message: "Saved")
         }
     }
 
@@ -203,6 +223,7 @@ public final class Daemon: @unchecked Sendable {
         }
         xpc_connection_activate(listener)
         log.info("barkeep \(version) daemon started")
+        do { try SettingsAuthorization.register() } catch { log.warning("\(error)") }
         // Saved again at once, so an older version's State.json (readable by everyone) is
         // replaced and each user's view written, without waiting for something to change.
         work.async { [self] in

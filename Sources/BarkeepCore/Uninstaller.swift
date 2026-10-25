@@ -20,6 +20,10 @@ public enum Uninstaller {
                 _ = try? Command.run("/bin/launchctl", ["bootout", "gui/\(user.uid)/\(Paths.agentLabel)"], timeout: 30)
             }
             _ = try? Command.run("/bin/launchctl", ["bootout", "system/\(Paths.daemonLabel)"], timeout: 30)
+            // Before the binary goes: the system checks the code of whoever changes a right.
+            if SettingsAuthorization.unregister() {
+                report.removed.append("authorization right \(SettingsAuthorization.right)")
+            }
         }
         for path in items where FileManager.default.fileExists(atPath: path) {
             if dryRun {

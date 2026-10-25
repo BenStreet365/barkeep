@@ -192,10 +192,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc func showSettings() {
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 560),
-                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 720),
+                                  styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             window.title = "Barkeep Settings"
-            window.contentViewController = NSHostingController(rootView: SettingsView(model: model, delegate: self))
+            let host = NSHostingController(rootView: SettingsView(model: model, delegate: self))
+            // A grouped form scrolls, so it has no height of its own and would shrink the window
+            // to its title bar: the window sets the size, the form only its minimum.
+            host.sizingOptions = [.minSize]
+            window.contentViewController = host
+            window.setContentSize(NSSize(width: 600, height: 720))
+            window.setFrameAutosaveName("BarkeepSettingsWindow")
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()

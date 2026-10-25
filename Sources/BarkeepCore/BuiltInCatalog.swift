@@ -45,6 +45,56 @@ public enum BuiltInCatalog {
         AppSourceDefinition(
             bundleIdentifier: "com.microsoft.VSCode", kind: .squirrel,
             feedURL: "https://update.code.visualstudio.com", expectedTeamIdentifier: "UBF8T346G9", channel: "stable"),
+        // ChatGPT (the Codex-based app) sets its Sparkle feed at run time.
+        AppSourceDefinition(
+            bundleIdentifier: "com.openai.codex", kind: .sparkle,
+            feedURL: "https://persistent.oaistatic.com/codex-app-prod/appcast.xml",
+            expectedTeamIdentifier: "2DC432GLL2"),
+        // Squirrel.Mac's RELEASES.json: the zip's name carries a hash, so the URL is read from the feed.
+        AppSourceDefinition(
+            bundleIdentifier: "com.anthropic.claudefordesktop", kind: .json,
+            feedURL: "https://downloads.claude.ai/releases/darwin/universal/RELEASES.json",
+            versionPath: "releases.0.updateTo.version", releaseDatePath: "releases.0.updateTo.pub_date",
+            downloadPath: "releases.0.updateTo.url",
+            expectedTeamIdentifier: "Q6L2SF6YDW"),
+        // The standalone (not App Store) Tailscale sets its Sparkle feed at run time.
+        AppSourceDefinition(
+            bundleIdentifier: "io.tailscale.ipn.macsys", kind: .sparkle,
+            feedURL: "https://pkgs.tailscale.com/stable/appcast.xml",
+            expectedTeamIdentifier: "W5364U7YZB"),
+        AppSourceDefinition(
+            bundleIdentifier: "md.obsidian", kind: .gitHub,
+            repository: "obsidianmd/obsidian-releases", assetPattern: "^Obsidian-[0-9.]+\\.dmg$",
+            expectedTeamIdentifier: "6JSW4SJWN9"),
+        AppSourceDefinition(
+            bundleIdentifier: "com.utmapp.UTM", kind: .gitHub,
+            repository: "utmapp/UTM", assetPattern: "^UTM\\.dmg$",
+            expectedTeamIdentifier: "WDNLXAD4W8"),
+        AppSourceDefinition(
+            bundleIdentifier: "io.balena.etcher", kind: .gitHub,
+            repository: "balena-io/etcher", assetPattern: "^balenaEtcher-.*-arm64\\.dmg$",
+            expectedTeamIdentifier: "66H43P8FRG"),
+        AppSourceDefinition(
+            bundleIdentifier: "org.thonny.Thonny", kind: .gitHub,
+            repository: "thonny/thonny", assetPattern: "^thonny-.*-arm64\\.pkg$",
+            expectedTeamIdentifier: "2SA9D4CVU8"),
+        AppSourceDefinition(
+            bundleIdentifier: "com.bambulab.bambu-studio", kind: .gitHub,
+            repository: "bambulab/BambuStudio", assetPattern: "^Bambu_Studio_mac-.*\\.dmg$",
+            expectedTeamIdentifier: "T3UBR9Y3B2"),
+        AppSourceDefinition(
+            bundleIdentifier: "com.raspberrypi.rpi-imager", kind: .gitHub,
+            repository: "raspberrypi/rpi-imager", assetPattern: "^rpi-imager-.*\\.dmg$",
+            expectedTeamIdentifier: "8RDZTRXE62"),
+        AppSourceDefinition(
+            bundleIdentifier: "net.mullvad.mullvadbrowser", kind: .json,
+            feedURL: "https://cdn.mullvad.net/browser/update_responses/update_1/release/download-macos.json",
+            versionPath: "version", downloadPath: "binary",
+            expectedTeamIdentifier: "MADPSAYN6T"),
+        AppSourceDefinition(
+            bundleIdentifier: "uk.street365.decant.app", kind: .gitHub,
+            repository: "BenStreet365/decant", assetPattern: "^decant-full-.*\\.pkg$",
+            expectedTeamIdentifier: "Y633696656"),
     ]
 
     public static func entry(for bundleID: String) -> AppSourceDefinition? {
