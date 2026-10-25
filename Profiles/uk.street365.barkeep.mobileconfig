@@ -113,7 +113,9 @@
 			     apps, and reports App Store apps and apps with their own updaters (Microsoft
 			     AutoUpdate, Adobe). For anything else, or to replace what it found, add a source.
 			     Type: Sparkle, ElectronBuilder, Squirrel, GitHub, JSON, AppStore, Vendor or None.
-			     ExpectedTeamIdentifier is recommended for every source.
+			     ExpectedTeamIdentifier is recommended for every source. A JSON source can give
+			     DownloadPath (a dot path to the download URL in the response) instead of
+			     DownloadURL, when the download's name can't be worked out from the version.
 			<key>AppSources</key>
 			<array>
 				<dict>

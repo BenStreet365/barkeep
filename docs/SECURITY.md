@@ -8,6 +8,7 @@ internet. This is how it keeps that from becoming a way in.
 | Input | Trusted? | Why |
 |---|---|---|
 | The configuration profile | Yes | Only read from `/Library/Managed Preferences`, and only if the file is owned by root and writable by nobody else. |
+| Settings changed on the Mac | Yes, below the profile | `Settings.plist` in barkeep's state folder, read only if owned by root and writable by nobody else. Only the daemon writes it, and only for an administrator's password (below). Keys that relax testing-only checks can't be set there. |
 | The installed app's signature | As far as Apple vouches for it | Its Team ID counts only if an Apple-issued certificate backs it. Its designated requirement is what every update must satisfy. |
 | The installed app's update metadata (`SUFeedURL`, `app-update.yml`, `product.json`) | No | Only used to find a feed. Whatever the feed offers must still be signed like the installed copy. |
 | Feeds and downloads | No | Checked as below. |
@@ -85,6 +86,18 @@ folder is theirs; administrators and root see everything.
 
 Barkeep.app ignores state and leases unless they are root-owned and writable only by root. They
 contain app names, versions, paths and update sources, nothing secret.
+
+## Changing settings on the Mac
+
+The Settings window in Barkeep.app has no privileges. To change a setting it asks for an
+administrator's name and password (the authorization right `uk.street365.barkeep.settings`, which
+the daemon defines: an administrator, remembered for five minutes by that window only, not shared
+with other apps), and sends the authorization with each change. The daemon checks the
+authorization itself, without asking anyone, so a process that merely runs as an administrator
+can't change root's policy without the password. It refuses keys the profile sets and keys that
+can only come from a profile (`AppSources`, `AppSettings`, `LogFilePath`,
+`AllowUnverifiedSignatures`, `AllowFileURLs`), checks the value as it would a profile's, and
+writes the file atomically.
 
 ## barkeep's own updates
 

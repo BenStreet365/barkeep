@@ -12,6 +12,10 @@ final class FeedTests: XCTestCase {
         XCTAssertEqual(Version.compare("156.0.8078.48", "156.0.8078.12"), .orderedDescending)
         XCTAssertEqual(Version.fromTag("v1.2.3"), "1.2.3")
         XCTAssertEqual(Version.fromTag("release-4.5"), "4.5")
+        // A leading "v" is ignored, so v-prefixed installed versions still update.
+        XCTAssertEqual(Version.compare("v2.0.12", "2.0.12"), .orderedSame)
+        XCTAssertEqual(Version.compare("2.0.13", "v2.0.12"), .orderedDescending)
+        XCTAssertEqual(Version.compare("V3", "2.9"), .orderedDescending)
     }
 
     func app(short: String?, build: String?) -> InstalledApp {
@@ -25,6 +29,8 @@ final class FeedTests: XCTestCase {
         // Sparkle compares builds: a rebuilt 1.1 is newer.
         XCTAssertTrue(AvailableUpdate(version: "1.1", build: "41").isNewer(than: app(short: "1.1", build: "40")))
         XCTAssertFalse(AvailableUpdate(version: "1.2", build: "39").isNewer(than: app(short: "1.1", build: "40")))
+        XCTAssertTrue(AvailableUpdate(version: "2.0.13").isNewer(than: app(short: "v2.0.12", build: nil)))
+        XCTAssertFalse(AvailableUpdate(version: "2.0.12").isNewer(than: app(short: "v2.0.12", build: nil)))
     }
 
     static let appcast = """
@@ -89,6 +95,24 @@ final class FeedTests: XCTestCase {
         XCTAssertEqual(update.version, "2.0")
         XCTAssertEqual(update.build, "200")
         XCTAssertEqual(update.edSignature, "c2lnbmF0dXJl")
+    }
+
+    func testSparkleRelativeEnclosureURL() throws {
+        XCTAssertEqual(UpdateFinder.resolve("Tailscale-1.104.2-macos.zip", against: "https://pkgs.tailscale.com/stable/appcast.xml"),
+                       "https://pkgs.tailscale.com/stable/Tailscale-1.104.2-macos.zip")
+        XCTAssertEqual(UpdateFinder.resolve("https://cdn.example.com/App.zip", against: "https://example.com/appcast.xml"),
+                       "https://cdn.example.com/App.zip")
+        let fixtures = try Fixtures()
+        let feed = try fixtures.write("""
+        <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><item>
+          <sparkle:version>101.104.2</sparkle:version><sparkle:shortVersionString>1.104.2</sparkle:shortVersionString>
+          <enclosure url="Tailscale-1.104.2-macos.zip" length="10" sparkle:edSignature="c2ln"/>
+        </item></channel></rss>
+        """, to: "appcast.xml")
+        let finder = UpdateFinder(config: Fixtures.testConfiguration(), log: Fixtures.quietLog())
+        let update = try XCTUnwrap(finder.latest(for: app(short: "1.102.4", build: "101.102.4"),
+                                                 source: AppSourceDefinition(bundleIdentifier: "x", kind: .sparkle, feedURL: feed.absoluteString)))
+        XCTAssertEqual(update.downloadURL, feed.deletingLastPathComponent().appendingPathComponent("Tailscale-1.104.2-macos.zip").absoluteString)
     }
 
     func testFileURLsNeedPermission() throws {
@@ -180,6 +204,45 @@ final class FeedTests: XCTestCase {
         let source = AppSourceDefinition(bundleIdentifier: "x", kind: .json, feedURL: feed.absoluteString,
                                          versionPattern: "Latest version: <b>([0-9.]+)</b>", downloadURL: "https://e/{version}.zip")
         XCTAssertEqual(try finder.latest(for: app(short: "1", build: "1"), source: source)?.version, "4.2.1")
+    }
+
+    func testJSONSourceWithDownloadPath() throws {
+        let fixtures = try Fixtures()
+        let feed = try fixtures.write(#"{"currentRelease":"3.6556.2","releases":[{"version":"3.6556.2","updateTo":{"version":"3.6556.2","pub_date":"2026-10-22T23:07:11.824Z","url":"https://example.com/3.6556.2/App-20c019a1.zip"}}]}"#, to: "RELEASES.json")
+        let finder = UpdateFinder(config: Fixtures.testConfiguration(), log: Fixtures.quietLog())
+        var source = AppSourceDefinition(bundleIdentifier: "x", kind: .json, feedURL: feed.absoluteString,
+                                         versionPath: "releases.0.updateTo.version", releaseDatePath: "releases.0.updateTo.pub_date",
+                                         downloadPath: "releases.0.updateTo.url")
+        XCTAssertNoThrow(try source.validate())
+        let update = try XCTUnwrap(finder.latest(for: app(short: "3.6000.0", build: "3.6000.0"), source: source))
+        XCTAssertEqual(update.version, "3.6556.2")
+        XCTAssertEqual(update.downloadURL, "https://example.com/3.6556.2/App-20c019a1.zip")
+        XCTAssertNotNil(update.releaseDate)
+
+        source.downloadPath = "releases.0.updateTo.missing"
+        XCTAssertThrowsError(try finder.latest(for: app(short: "1", build: "1"), source: source))
+    }
+
+    func testJSONSourceNeedsOneDownload() throws {
+        let base: [String: Any] = ["BundleIdentifier": "x", "Type": "JSON", "FeedURL": "https://e/v.json", "VersionPath": "v"]
+        XCTAssertThrowsError(try AppSourceDefinition(plist: base), "no download")
+        XCTAssertEqual(try AppSourceDefinition(plist: base.merging(["DownloadPath": "url"]) { $1 }).downloadPath, "url")
+        XCTAssertThrowsError(try AppSourceDefinition(plist: base.merging(["DownloadPath": "url", "DownloadURL": "https://e/{version}.zip"]) { $1 }),
+                             "DownloadURL and DownloadPath together")
+    }
+
+    func testBuiltInCatalog() throws {
+        var seen = Set<String>()
+        for entry in BuiltInCatalog.entries {
+            XCTAssertNoThrow(try entry.validate(), entry.bundleIdentifier)
+            XCTAssertNotNil(entry.expectedTeamIdentifier, "\(entry.bundleIdentifier) must pin a Team ID")
+            XCTAssertTrue(seen.insert(entry.bundleIdentifier.lowercased()).inserted, "\(entry.bundleIdentifier) is listed twice")
+        }
+        XCTAssertEqual(BuiltInCatalog.entry(for: "MD.OBSIDIAN")?.repository, "obsidianmd/obsidian-releases")
+        let assets = ["obsidian-1.14.5-arm64.tar.gz", "obsidian-1.14.5.asar.gz", "Obsidian-1.14.5.dmg", "obsidian-1.14.5.tar.gz"]
+            .map { UpdateFinder.GitHubRelease.Asset(name: $0, browserDownloadUrl: $0, size: 1, digest: nil) }
+        XCTAssertEqual(UpdateFinder.pickGitHubAsset(assets, pattern: BuiltInCatalog.entry(for: "md.obsidian")?.assetPattern)?.name,
+                       "Obsidian-1.14.5.dmg")
     }
 
     func testSquirrelFeed() throws {

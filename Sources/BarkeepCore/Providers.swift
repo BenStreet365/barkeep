@@ -43,7 +43,7 @@ public struct AvailableUpdate: Codable, Sendable, Equatable {
 
 public enum Version {
     /// Compares versions by their numeric and alphabetic runs, ignoring punctuation:
-    /// "1.10" > "1.9", "2.0" == "2", "7.2.2 (88465)" == "7.2.2.88465", "1.0b2" > "1.0b1".
+    /// "1.10" > "1.9", "2.0" == "2", "7.2.2 (88465)" == "7.2.2.88465", "1.0b2" > "1.0b1", "v2.0.12" == "2.0.12".
     public static func compare(_ a: String, _ b: String) -> ComparisonResult {
         var left = tokens(a), right = tokens(b)
         let count = max(left.count, right.count)
@@ -77,6 +77,10 @@ public enum Version {
             currentIsDigit = isDigit
         }
         if !current.isEmpty { result.append(current) }
+        // A leading "v" (Raspberry Pi Imager's "v2.0.12") is not part of the version.
+        if result.count > 1, result[0].caseInsensitiveCompare("v") == .orderedSame, result[1].first?.isNumber == true {
+            result.removeFirst()
+        }
         return result
     }
 
@@ -131,12 +135,19 @@ public struct UpdateFinder {
         }
         guard let best = usable.max(by: { Version.compare($0.build, $1.build) == .orderedAscending }) else { return nil }
         var update = AvailableUpdate(version: best.shortVersion ?? best.build, build: best.build,
-                                     downloadURL: best.url, releaseDate: best.date)
+                                     downloadURL: Self.resolve(best.url, against: source.feedURL), releaseDate: best.date)
         update.size = best.length
         update.edSignature = best.edSignature
         update.minimumSystemVersion = best.minimumSystemVersion
         update.releaseNotesURL = best.releaseNotesURL
         return update
+    }
+
+    /// An enclosure URL relative to the appcast (Tailscale's `Tailscale-1.104.2-macos.zip`), made
+    /// absolute. The download itself must still be HTTPS.
+    static func resolve(_ url: String, against feed: String?) -> String {
+        guard let feed, let base = URL(string: feed), let resolved = URL(string: url, relativeTo: base) else { return url }
+        return resolved.absoluteString
     }
 
     /// The next minor version, so a maximum of "15.99" still accepts 15.99.1.
@@ -289,8 +300,8 @@ public struct UpdateFinder {
         let (data, _) = try get(source.feedURL ?? "")
         var version: String?
         var date: Date?
+        let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
         if let path = source.versionPath {
-            let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
             version = object.flatMap { JSONPath.value(at: path, in: $0) }.flatMap(JSONPath.string)
             if let datePath = source.releaseDatePath, let object {
                 date = JSONPath.value(at: datePath, in: object).flatMap(DateParsing.parseAny)
@@ -305,8 +316,17 @@ public struct UpdateFinder {
         guard let version, !version.isEmpty, !version.containsControlCharacters else {
             throw BarkeepError(.feedError, "No version found in \(source.feedURL ?? "")")
         }
-        let encoded = version.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? version
-        let download = (source.downloadURL ?? "").replacingOccurrences(of: "{version}", with: encoded)
+        let download: String
+        if let path = source.downloadPath {
+            guard let url = object.flatMap({ JSONPath.value(at: path, in: $0) }).flatMap(JSONPath.string),
+                  !url.isEmpty, !url.containsControlCharacters else {
+                throw BarkeepError(.feedError, "No download URL at \(path) in \(source.feedURL ?? "")")
+            }
+            download = url
+        } else {
+            let encoded = version.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? version
+            download = (source.downloadURL ?? "").replacingOccurrences(of: "{version}", with: encoded)
+        }
         return AvailableUpdate(version: version, downloadURL: download, releaseDate: date)
     }
 
