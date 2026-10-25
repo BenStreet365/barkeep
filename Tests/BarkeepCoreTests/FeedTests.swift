@@ -288,8 +288,15 @@ final class FeedTests: XCTestCase {
         XCTAssertNil(ArchiveKind.detect(try fixtures.write("<html>not found</html>", to: "x.zip")))
         // A bzip2-compressed disk image starts with "BZh" but is still a disk image.
         let image = fixtures.root.appendingPathComponent("bz.dmg")
-        let made = try Command.run("/usr/bin/hdiutil", ["create", "-quiet", "-srcfolder", app.deletingLastPathComponent().path,
+        // hdiutil sometimes fails on CI runners for no reason it reports, so try a few times.
+        var made = try Command.run("/usr/bin/hdiutil", ["create", "-quiet", "-srcfolder", app.deletingLastPathComponent().path,
                                                         "-format", "UDBZ", image.path])
+        for _ in 0..<3 where made.status != 0 {
+            try? FileManager.default.removeItem(at: image)
+            Thread.sleep(forTimeInterval: 2)
+            made = try Command.run("/usr/bin/hdiutil", ["create", "-quiet", "-srcfolder", app.deletingLastPathComponent().path,
+                                                        "-format", "UDBZ", image.path])
+        }
         XCTAssertEqual(made.status, 0, made.stderrString)
         XCTAssertEqual(ArchiveKind.detect(image), .diskImage)
     }

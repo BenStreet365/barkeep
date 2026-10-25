@@ -97,10 +97,13 @@ final class ConfigurationTests: XCTestCase {
         let path = dir.appendingPathComponent("\(Configuration.domain).plist")
         try PropertyListSerialization.data(fromPropertyList: ["CoolingOffHours": 5], format: .xml, options: 0).write(to: path)
         // Owned by the test user, not root: ignored.
-        let (strict, warnings) = ConfigurationLoader(managedPreferencesDirectory: dir.path).load()
+        // Not this Mac's own Settings.plist, which may exist.
+        let local = dir.appendingPathComponent("Settings.plist").path
+        let (strict, warnings) = ConfigurationLoader(managedPreferencesDirectory: dir.path, localSettingsPath: local).load()
         XCTAssertEqual(strict.coolingOffHours, 168)
         XCTAssertTrue(warnings.first?.contains("not owned by root") == true)
-        let (relaxed, _) = ConfigurationLoader(managedPreferencesDirectory: dir.path, requireRootOwnership: false).load()
+        let (relaxed, _) = ConfigurationLoader(managedPreferencesDirectory: dir.path, localSettingsPath: local,
+                                               requireRootOwnership: false).load()
         XCTAssertEqual(relaxed.coolingOffHours, 5)
     }
 

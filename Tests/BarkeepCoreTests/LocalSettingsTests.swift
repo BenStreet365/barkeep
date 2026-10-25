@@ -43,8 +43,8 @@ final class LocalSettingsTests: XCTestCase {
         let local = try fixtures.folder("support").appendingPathComponent("Settings.plist")
         try PropertyListSerialization.data(fromPropertyList: ["CoolingOffHours": 48, "DeadlineDays": 3, "AllowFileURLs": true],
                                            format: .xml, options: 0).write(to: local)
-        var loader = ConfigurationLoader(managedPreferencesDirectory: prefs.path, requireRootOwnership: false)
-        loader.localSettingsPath = local.path
+        let loader = ConfigurationLoader(managedPreferencesDirectory: prefs.path, localSettingsPath: local.path,
+                                         requireRootOwnership: false)
         let (config, warnings) = loader.load()
         XCTAssertEqual(warnings, [])
         XCTAssertEqual(config.coolingOffHours, 5)
@@ -54,8 +54,7 @@ final class LocalSettingsTests: XCTestCase {
         XCTAssertEqual(config.localKeys, ["DeadlineDays"])
 
         // Owned by the test user, not root: ignored outside tests.
-        var strict = ConfigurationLoader(managedPreferencesDirectory: prefs.path)
-        strict.localSettingsPath = local.path
+        let strict = ConfigurationLoader(managedPreferencesDirectory: prefs.path, localSettingsPath: local.path)
         XCTAssertEqual(strict.load().0.deadlineDays, 14)
     }
 
