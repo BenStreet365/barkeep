@@ -368,13 +368,14 @@ public struct ConfigurationLoader: Sendable {
     public var requireRootOwnership: Bool
 
     public init(managedPreferencesDirectory: String = Configuration.managedPreferencesDirectory,
-                requireRootOwnership: Bool = true) {
+                localSettingsPath: String = LocalSettings.path, requireRootOwnership: Bool = true) {
         self.managedPreferencesDirectory = managedPreferencesDirectory
+        self.localSettingsPath = localSettingsPath
         self.requireRootOwnership = requireRootOwnership
     }
 
     public var devicePath: String { "\(managedPreferencesDirectory)/\(Configuration.domain).plist" }
-    public var localSettingsPath = LocalSettings.path
+    public var localSettingsPath: String
 
     /// Precedence (lowest to highest): built-in defaults, settings changed on this Mac, the
     /// device-scoped profile, then `overrideFile` (only honoured for root; see the CLI). Barkeep
