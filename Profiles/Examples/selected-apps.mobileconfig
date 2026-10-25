@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Selected apps: barkeep manages only the apps listed, only from the developers listed, and only
+     in /Applications (apps users installed for themselves in ~/Applications are left alone).
+     One app that barkeep can't work out on its own gets an update source.
+     Keys left out keep their defaults; see Profiles/uk.street365.barkeep.mobileconfig for every
+     key. Deploy one barkeep settings profile per Mac. -->
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadType</key>
+			<string>uk.street365.barkeep</string>
+			<key>PayloadIdentifier</key>
+			<string>uk.street365.barkeep.settings.3F9CC88E-0227-41CE-BACB-4EF6EF2A3AE5</string>
+			<key>PayloadUUID</key>
+			<string>3F9CC88E-0227-41CE-BACB-4EF6EF2A3AE5</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadDisplayName</key>
+			<string>barkeep settings (selected apps)</string>
+
+			<key>IncludedBundleIdentifiers</key>
+			<array>
+				<string>com.google.Chrome</string>
+				<string>org.mozilla.firefox</string>
+				<string>us.zoom.xos</string>
+				<string>com.example.sparkleapp</string>
+			</array>
+			<key>AllowedTeamIdentifiers</key>
+			<array>
+				<string>EQHXZ8M8AV</string>
+				<string>43AQ936H96</string>
+				<string>BJ4HAAB9B3</string>
+				<string>ABCDE12345</string>
+			</array>
+			<key>ScanPaths</key>
+			<array>
+				<string>/Applications</string>
+			</array>
+			<key>AppSources</key>
+			<array>
+				<dict>
+					<key>BundleIdentifier</key>
+					<string>com.example.sparkleapp</string>
+					<key>Type</key>
+					<string>Sparkle</string>
+					<key>FeedURL</key>
+					<string>https://example.com/appcast.xml</string>
+					<key>ExpectedTeamIdentifier</key>
+					<string>ABCDE12345</string>
+				</dict>
+			</array>
+		</dict>
+	</array>
+	<key>PayloadDisplayName</key>
+	<string>barkeep (selected apps)</string>
+	<key>PayloadDescription</key>
+	<string>Configures barkeep: only the apps the organisation names.</string>
+	<key>PayloadIdentifier</key>
+	<string>uk.street365.barkeep.profile</string>
+	<key>PayloadOrganization</key>
+	<string>IT</string>
+	<key>PayloadScope</key>
+	<string>System</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>27ED0446-BE3F-460D-ADCC-100A67CB9670</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

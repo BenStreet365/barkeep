@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barkeep</title>
+<meta name="description" content="Keeps the apps on managed Macs up to date, quietly. Reads each app's own update feed, verifies every update against the installed copy, and only interrupts when a deadline says it must.">
+<link rel="canonical" href="https://barkeep.street365.uk/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:title" content="Barkeep">
+<meta property="og:description" content="Keeps the apps on your Macs up to date without bothering the people using them.">
+<meta property="og:url" content="https://barkeep.street365.uk/">
+<meta property="og:type" content="website">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="wrap top">
+  <a class="brand" href="/"><img src="favicon.svg" alt="" width="24" height="24"> Barkeep</a>
+  <nav>
+    <a href="#sources">Sources</a>
+    <a href="#security">Security</a>
+    <a href="#timing">Timing</a>
+    <a href="#app">The app</a>
+    <a href="#deploy">Deploy</a>
+    <a href="https://github.com/BenStreet365/barkeep">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <h1>Every Mac app updates itself.<br>Just not when you need it to.</h1>
+    <p class="lede">Each app has its own idea of updating: some check on launch, some ask for an
+      admin password, some wait for the user to click a button they've learned to ignore. Your
+      vulnerability report doesn't care whose idea it was.</p>
+    <p class="lede">Barkeep keeps the bar. It runs in the background, works out how each app
+      updates, and installs the update while the app is closed, after it's been out long enough
+      to trust. Nobody gets interrupted unless a deadline you set says they must.</p>
+    <p class="meta">macOS 27+ · Apple silicon · Intune, Jamf, Kandji and other MDMs</p>
+    <figure class="shot hero-shot">
+      <img src="screenshots/updates-waiting.jpg" width="1348" height="896"
+        alt="Barkeep's window listing two updates waiting. Rectangle 2.0.4 is cooling off: it will be installed after 27 October, with a deadline of 3 November.">
+    </figure>
+  </section>
+
+  <section class="wrap" id="sources">
+    <h2>Knows how apps update</h2>
+    <p class="sub">Most apps already publish their updates somewhere. Barkeep reads the same feed they do.</p>
+    <div class="grid">
+      <article>
+        <h3>Sparkle</h3>
+        <p>The appcast in the app's <code>SUFeedURL</code>, with the EdDSA signature the app's own
+          key expects. Channels, minimum macOS and delta-only items handled.</p>
+      </article>
+      <article>
+        <h3>Electron and VS Code</h3>
+        <p>electron-builder's <code>latest-mac.yml</code> (GitHub, generic or S3) with its SHA-512, and
+          the Squirrel-style API in VS Code's <code>product.json</code> with its SHA-256.</p>
+      </article>
+      <article>
+        <h3>A catalog, and yours</h3>
+        <p>Chrome, Firefox, Zoom, Slack, Discord and Docker are built in. Add anything else in the
+          profile: a GitHub repository, an appcast, or any URL that says what's newest.</p>
+      </article>
+      <article>
+        <h3>Knows its limits</h3>
+        <p>App Store apps and apps with their own enterprise updater (Microsoft AutoUpdate, Adobe)
+          are reported, not fought over. Apple's own apps are left to Software Update.</p>
+      </article>
+    </div>
+    <figure class="shot">
+      <img src="screenshots/all-apps.jpg" width="1348" height="896" loading="lazy"
+        alt="Barkeep's window listing four apps, each with the way it updates: Firefox from a JSON feed, Rectangle from Sparkle, Visual Studio Code from Squirrel, and Barkeep from its vendor.">
+      <figcaption>Each app with the feed it updates from.</figcaption>
+    </figure>
+<pre><code>$ barkeep inspect "/Applications/Visual Studio Code.app"
+Update source:  Squirrel (catalog) https://update.code.visualstudio.com
+Newest:         1.143.1, released 21 Oct 2026 at 10:15
+Checksums:      SHA-256
+Update?:        yes</code></pre>
+  </section>
+
+  <section class="wrap" id="security">
+    <h2>No fake updates</h2>
+    <p class="sub">A feed can be hijacked. A signature from the same developer can't be faked.</p>
+    <div class="grid">
+      <article>
+        <h3>Same developer</h3>
+        <p>The new copy must be signed by the Apple-verified Team ID of the copy it replaces, and
+          satisfy that copy's designated requirement: the same rule macOS uses to decide two
+          builds are the same app.</p>
+      </article>
+      <article>
+        <h3>Same app, and newer</h3>
+        <p>Same bundle ID, a higher version, built for this Mac's macOS and Apple silicon. No
+          downgrades, however the feed is dressed up.</p>
+      </article>
+      <article>
+        <h3>Same bytes the vendor signed</h3>
+        <p>HTTPS only, size-limited, and matched against any checksum or Sparkle EdDSA signature in
+          the feed. Gatekeeper has to agree it's notarised.</p>
+      </article>
+      <article>
+        <h3>Checked where it's installed</h3>
+        <p>Every check runs on a root-owned staged copy beside the app, which is then swapped in
+          atomically. What's verified is exactly what gets installed.</p>
+      </article>
+      <article>
+        <h3>Packages too</h3>
+        <p>Updates shipped as <code>.pkg</code> must be signed by the app's own team and notarised,
+          and the app they leave behind is checked again afterwards.</p>
+      </article>
+      <article>
+        <h3>Locked configuration</h3>
+        <p>Settings come from a managed profile users can't change. Root-owned files only.</p>
+      </article>
+    </div>
+    <figure class="shot">
+      <img src="screenshots/app-details.jpg" width="1348" height="896" loading="lazy"
+        alt="Firefox's details in Barkeep: updated from 158.0 to 158.0.1, found in Barkeep's catalog, with the expected team 43AQ936H96 matching the installed app's Team ID.">
+      <figcaption>An update is installed only if it's signed by the same developer team as the app it replaces.</figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap" id="timing">
+    <h2>Polite, until it can't be</h2>
+    <p class="sub">The best time to update an app is when nobody is using it.</p>
+    <ol class="steps">
+      <li><strong>Cooling-off.</strong> An update waits until it has been out for a week (you
+        choose), so the vendor's bad release is somebody else's Tuesday.</li>
+      <li><strong>Quietly, while closed.</strong> The moment the app isn't running, it's swapped
+        for the new version. While that takes, the app can't be opened half-updated: open it, and
+        it reopens a moment later. That hold expires on its own, so a failed update never locks
+        anyone out.</li>
+      <li><strong>Deadline.</strong> Still open two weeks after the update was released?
+        The user gets a notification, an hour's grace, then the app is asked to quit, exactly as if
+        they'd chosen Quit, so it can ask to save. It reopens when it's done.</li>
+    </ol>
+    <ul class="points">
+      <li><strong>Per-app rules.</strong> Exclude <code>com.docker.docker</code>, rush Chrome,
+        never force Slack: every timing setting can be set per bundle ID.</li>
+      <li><strong>Users can hurry it along.</strong> Update Now in Barkeep.app, if you allow it.
+        The cooling-off period still applies.</li>
+      <li><strong>Everywhere apps live.</strong> <code>/Applications</code>, every user's
+        <code>~/Applications</code>, one folder down, or the folders you choose.</li>
+    </ul>
+    <figure class="shot">
+      <img src="screenshots/installing.jpg" width="1348" height="896" loading="lazy"
+        alt="Barkeep installing Firefox 158.0.1, with the date it was found, when it could install, and its deadline.">
+      <figcaption>An update installing, with when it was found and its deadline.</figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap" id="app">
+    <h2>Nothing hidden from the people using the Mac</h2>
+    <p class="sub">Barkeep.app sits in the menu bar and says what's waiting, and when.</p>
+    <div class="shots">
+      <figure>
+        <img src="screenshots/menu-bar-up-to-date.jpg" width="767" height="360" loading="lazy"
+          alt="Barkeep's menu bar popover: all 4 monitored apps are up to date.">
+        <figcaption>Up to date</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/menu-bar-updates-waiting.jpg" width="767" height="544" loading="lazy"
+          alt="Barkeep's menu bar popover: 2 updates waiting, Firefox after 1 November and Rectangle after 27 October.">
+        <figcaption>Updates waiting, and when they'll install</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/menu-bar-installing.jpg" width="767" height="516" loading="lazy"
+          alt="Barkeep's menu bar popover while Firefox installs and Barkeep checks for updates.">
+        <figcaption>Installing</figcaption>
+      </figure>
+    </div>
+    <ul class="points">
+      <li><strong>A dot when something's waiting</strong>, and an orange one when an app is about
+        to be asked to quit.</li>
+      <li><strong>A window with the reasons.</strong> Every app, how it updates, where its update
+        stands and why. Standard users see their own apps and the shared ones; administrators see
+        everyone's.</li>
+      <li><strong>No privileges.</strong> The app only reads the daemon's state and sends it
+        requests. Turn the icon off with <code>ShowInMenuBar</code>, or stop users starting
+        updates with <code>AllowUserInitiatedUpdates</code>.</li>
+    </ul>
+  </section>
+
+  <section class="wrap" id="deploy">
+    <h2>Simple to run</h2>
+    <p class="sub">One package, two profiles, no scripts per app.</p>
+    <ol class="steps">
+      <li><strong>Deploy the package.</strong> It installs <code>/usr/local/bin/barkeep</code>,
+        the daemon that does the work, and Barkeep.app for the menu bar. Don't want the app?
+        <code>barkeep-cli.pkg</code> leaves it out.</li>
+      <li><strong>Deploy the profiles.</strong> The settings profile spells out every default, so
+        it's safe unchanged, and there are examples for locked-down, fast-patching and
+        never-interrupt setups. The App Management profile lets barkeep replace other developers'
+        apps and pre-approves its notifications.</li>
+      <li><strong>Watch it work.</strong> <code>barkeep status</code>, the log at
+        <code>/Library/Logs/barkeep.log</code>, or Barkeep.app's window.</li>
+    </ol>
+<pre><code>$ barkeep status
+Firefox.app 150.0 → 158.0.1 [waitingForQuit] Firefox 158.0.1 will be installed when it quits, or by 31 Oct 2026 at 09:12
+Slack.app 4.52.182 [upToDate] Slack.app 4.52.182 is up to date
+Zoom.app 7.1.0 (60000) → 7.2.2.88465 [coolingOff] will be installed after 25 Oct 2026 at 14:00</code></pre>
+    <ul class="points">
+      <li><strong>Stable exit codes</strong> and <code>--json</code> everywhere, for scripts and
+        reporting.</li>
+      <li><strong>Barkeep keeps itself current.</strong> It installs its own releases once they're
+        a week old and the Mac is idle, after checking their checksum, signing team and
+        notarisation. Prefer your MDM? Turn it off in the profile.</li>
+      <li><strong>Leaves when asked.</strong> <code>sudo barkeep uninstall</code>.</li>
+    </ul>
+  </section>
+
+  <section class="wrap note">
+    <h2>Know the limits</h2>
+    <p>Barkeep updates apps that can be updated by replacing the app, or by the vendor's signed
+      package. It doesn't sign in to the App Store for anyone, can't update an app whose feed it
+      can't find (tell it in the profile), and on a cold-blooded deadline it asks apps to quit;
+      only if you say so does it insist. The README covers the trade-offs in full.</p>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p>Barkeep · <a href="https://github.com/BenStreet365/barkeep">Source, releases and documentation</a> · <a href="https://github.com/BenStreet365/barkeep/blob/main/LICENSE">Apache License 2.0</a></p>
+</footer>
+</body>
+</html>

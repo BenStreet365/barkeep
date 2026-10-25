@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Barkeep.app in each user's session, from login: the menu bar icon (unless ShowInMenuBar is
+     off), the launch guard that keeps an app closed while it is swapped for its update, polite
+     quitting at deadlines, reopening afterwards and the occasional notification. Restarted if it
+     crashes; a user who quits it gets it back at their next login. With OpenAtLogin off, Barkeep.app
+     exits as soon as it starts and launchd leaves it until the next login. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>uk.street365.barkeep.agent</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Applications/Barkeep.app/Contents/MacOS/Barkeep</string>
+		<string>--agent</string>
+	</array>
+	<key>LimitLoadToSessionType</key>
+	<string>Aqua</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>uk.street365.barkeep.app</string>
+	</array>
+</dict>
+</plist>

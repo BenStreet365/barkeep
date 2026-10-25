@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Fast patching: a 3-day cooling-off period and a 7-day deadline for everything, and browsers,
+     which fix exploited bugs often, installed the day they are released and closed for their
+     update after 2 days. Apps that won't quit are terminated at the deadline.
+     Keys left out keep their defaults; see Profiles/uk.street365.barkeep.mobileconfig for every
+     key. Deploy one barkeep settings profile per Mac. -->
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadType</key>
+			<string>uk.street365.barkeep</string>
+			<key>PayloadIdentifier</key>
+			<string>uk.street365.barkeep.settings.8CA93232-E64D-4EC3-A05A-0B000D3A6A6C</string>
+			<key>PayloadUUID</key>
+			<string>8CA93232-E64D-4EC3-A05A-0B000D3A6A6C</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadDisplayName</key>
+			<string>barkeep settings (fast patching)</string>
+
+			<key>CoolingOffHours</key>
+			<integer>72</integer>
+			<key>DeadlineDays</key>
+			<integer>7</integer>
+			<key>DeadlineGraceMinutes</key>
+			<integer>30</integer>
+			<!-- Unsaved work in an app that refuses to quit may be lost. -->
+			<key>ForceQuitAtDeadline</key>
+			<true/>
+			<key>CheckIntervalMinutes</key>
+			<integer>120</integer>
+			<key>AppSettings</key>
+			<dict>
+				<key>com.google.Chrome</key>
+				<dict>
+					<key>CoolingOffHours</key>
+					<integer>0</integer>
+					<key>DeadlineDays</key>
+					<integer>2</integer>
+				</dict>
+				<key>org.mozilla.firefox</key>
+				<dict>
+					<key>CoolingOffHours</key>
+					<integer>0</integer>
+					<key>DeadlineDays</key>
+					<integer>2</integer>
+				</dict>
+			</dict>
+		</dict>
+	</array>
+	<key>PayloadDisplayName</key>
+	<string>barkeep (fast patching)</string>
+	<key>PayloadDescription</key>
+	<string>Configures barkeep: shorter waits, with browsers updated within days.</string>
+	<key>PayloadIdentifier</key>
+	<string>uk.street365.barkeep.profile</string>
+	<key>PayloadOrganization</key>
+	<string>IT</string>
+	<key>PayloadScope</key>
+	<string>System</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>E6B154DE-4819-49EE-B0B3-D7FB49CA1FBF</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Locked down: users can't start updates or turn Barkeep off. Updates install on barkeep's
+     schedule only, Barkeep.app always opens at login and always shows in the menu bar, and
+     barkeep itself is shipped by the MDM rather than updating from GitHub.
+     Keys left out keep their defaults; see Profiles/uk.street365.barkeep.mobileconfig for every
+     key. Deploy one barkeep settings profile per Mac. -->
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadType</key>
+			<string>uk.street365.barkeep</string>
+			<key>PayloadIdentifier</key>
+			<string>uk.street365.barkeep.settings.5887A94F-67E8-440E-AB49-297F82FF001F</string>
+			<key>PayloadUUID</key>
+			<string>5887A94F-67E8-440E-AB49-297F82FF001F</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadDisplayName</key>
+			<string>barkeep settings (locked down)</string>
+
+			<!-- No Update Now or Check for Updates, in Barkeep.app or with barkeep update. -->
+			<key>AllowUserInitiatedUpdates</key>
+			<false/>
+			<!-- Users can't turn these off in Barkeep's settings. -->
+			<key>OpenAtLogin</key>
+			<true/>
+			<key>ShowInMenuBar</key>
+			<true/>
+			<!-- Ship new barkeep packages with the MDM instead. -->
+			<key>AutomaticSelfUpdates</key>
+			<false/>
+		</dict>
+	</array>
+	<key>PayloadDisplayName</key>
+	<string>barkeep (locked down)</string>
+	<key>PayloadDescription</key>
+	<string>Configures barkeep: updates on the organisation's schedule only.</string>
+	<key>PayloadIdentifier</key>
+	<string>uk.street365.barkeep.profile</string>
+	<key>PayloadOrganization</key>
+	<string>IT</string>
+	<key>PayloadScope</key>
+	<string>System</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>67CE6066-2981-4EA9-816D-C1529738D27F</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

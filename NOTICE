@@ -1,0 +1,10 @@
+barkeep
+Copyright 2026 Ben Street
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Parts of barkeep (code signature checks, disk image handling, path safety, logging and the
+self-update mechanism) come from decant, also by Ben Street under the Apache License 2.0.
+
+"Barkeep" and the Barkeep logo are trademarks of Ben Street. The licence does not grant permission
+to use them; modified versions must be distributed under a different name and icon.

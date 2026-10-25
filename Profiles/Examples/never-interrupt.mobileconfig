@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Never interrupt: updates only ever install while an app is closed, however long that takes,
+     so nobody is asked to quit anything. Barkeep stays out of the menu bar; users can still
+     open it from Applications to see what is waiting.
+     Keys left out keep their defaults; see Profiles/uk.street365.barkeep.mobileconfig for every
+     key. Deploy one barkeep settings profile per Mac. -->
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadType</key>
+			<string>uk.street365.barkeep</string>
+			<key>PayloadIdentifier</key>
+			<string>uk.street365.barkeep.settings.39A9AD64-7F02-46DD-B782-4076859F0F38</string>
+			<key>PayloadUUID</key>
+			<string>39A9AD64-7F02-46DD-B782-4076859F0F38</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadDisplayName</key>
+			<string>barkeep settings (never interrupt)</string>
+
+			<key>EnforceDeadlines</key>
+			<false/>
+			<key>ShowInMenuBar</key>
+			<false/>
+		</dict>
+	</array>
+	<key>PayloadDisplayName</key>
+	<string>barkeep (never interrupt)</string>
+	<key>PayloadDescription</key>
+	<string>Configures barkeep: updates install only while apps are closed.</string>
+	<key>PayloadIdentifier</key>
+	<string>uk.street365.barkeep.profile</string>
+	<key>PayloadOrganization</key>
+	<string>IT</string>
+	<key>PayloadScope</key>
+	<string>System</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>E9CFA827-6E77-436F-A2D0-F1D0D210D3F7</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

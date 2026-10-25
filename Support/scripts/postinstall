@@ -1,0 +1,23 @@
+#!/bin/sh
+# Loads the daemon after the first install, and the agent for whoever is logged in. A daemon
+# that is already loaded is left alone: it may be the one running this install (a self-update),
+# and it restarts itself into the new binary once it notices the old one was replaced.
+[ "$3" = "/" ] || exit 0
+# barkeep refuses to run as root when a non-root user could replace it, for example when
+# /usr/local/bin belongs to a user. Say so now rather than leave the daemon failing.
+/usr/local/bin/barkeep show-config > /dev/null || echo "barkeep will not run as root until the problem above is fixed" >&2
+LABEL=uk.street365.barkeep.daemon
+/bin/launchctl print "system/$LABEL" > /dev/null 2>&1 || /bin/launchctl bootstrap system "/Library/LaunchDaemons/$LABEL.plist" || echo "Could not load $LABEL" >&2
+
+AGENT=uk.street365.barkeep.agent
+if [ -f "/Library/LaunchAgents/$AGENT.plist" ]; then
+    CONSOLE_UID=$(/usr/bin/stat -f %u /dev/console)
+    if [ "$CONSOLE_UID" -gt 500 ] 2>/dev/null; then
+        # Loaded again even when already loaded: launchd ties the agent to the code it first saw,
+        # and a new Barkeep.app must be registered afresh. The agent installs nothing, so
+        # stopping it here interrupts no update.
+        /bin/launchctl bootout "gui/$CONSOLE_UID/$AGENT" > /dev/null 2>&1
+        /bin/launchctl bootstrap "gui/$CONSOLE_UID" "/Library/LaunchAgents/$AGENT.plist" || echo "Could not load $AGENT" >&2
+    fi
+fi
+exit 0

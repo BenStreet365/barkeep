@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- barkeep settings. Every key is optional; the values below are the defaults, so this profile
+     can be deployed unchanged. Check what a Mac ended up with: barkeep show-config -->
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadType</key>
+			<string>uk.street365.barkeep</string>
+			<key>PayloadIdentifier</key>
+			<string>uk.street365.barkeep.settings.6A1C3E5F-8B2D-4F70-9E14-2C7B5D9A0F36</string>
+			<key>PayloadUUID</key>
+			<string>6A1C3E5F-8B2D-4F70-9E14-2C7B5D9A0F36</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadDisplayName</key>
+			<string>barkeep settings</string>
+
+			<!-- ===== Which apps ===== -->
+
+			<!-- Bundle IDs barkeep never touches. A trailing * matches a prefix.
+			     Find an app's bundle ID with: barkeep inspect /Applications/Example.app -->
+			<key>ExcludedBundleIdentifiers</key>
+			<array>
+				<!-- <string>com.microsoft.Excel</string> -->
+				<!-- <string>com.adobe.*</string> -->
+			</array>
+
+			<!-- If not empty, only these bundle IDs are managed (same * rules).
+			<key>IncludedBundleIdentifiers</key>
+			<array>
+				<string>org.mozilla.firefox</string>
+			</array>
+			-->
+
+			<!-- Folders searched for apps, plus one level of subfolders. ~ means every local
+			     user's home folder. Symlinks are never followed. This list replaces the defaults:
+			     keep both lines and add yours, or remove ~/Applications to leave apps users
+			     installed for themselves alone. -->
+			<key>ScanPaths</key>
+			<array>
+				<string>/Applications</string>
+				<string>~/Applications</string>
+				<!-- <string>/Users/Shared/Applications</string> -->
+			</array>
+
+			<!-- If not empty, only apps signed by one of these Team IDs are updated.
+			<key>AllowedTeamIdentifiers</key>
+			<array>
+				<string>EQHXZ8M8AV</string>
+			</array>
+			-->
+
+			<!-- ===== When ===== -->
+
+			<!-- An update must have been out this many hours before it is installed: from the
+			     release date in the vendor's feed, or, if the feed has none, from when barkeep
+			     first saw it. 0 to 8760 (168 is 7 days). -->
+			<key>CoolingOffHours</key>
+			<integer>168</integer>
+
+			<!-- Updates install silently whenever the app is closed. An app still open this many
+			     days after its update was released by the vendor (DeadlineBasis Released) or found
+			     by barkeep (Discovered) is closed for its update. Never before the cooling-off
+			     period ends. 0 to 365. -->
+			<key>DeadlineDays</key>
+			<integer>14</integer>
+			<key>DeadlineBasis</key>
+			<string>Released</string>
+			<!-- false: never close an app; updates wait until it quits, however long. -->
+			<key>EnforceDeadlines</key>
+			<true/>
+			<!-- At the deadline the user is told the app will close, and it closes this many
+			     minutes later. 0 to 1440. -->
+			<key>DeadlineGraceMinutes</key>
+			<integer>60</integer>
+			<!-- Apps are asked to quit as if the user chose Quit, so they can save. An app that
+			     refuses (an unsaved document dialog, say) is asked again later. true: after two
+			     minutes it is terminated instead, and unsaved work may be lost. -->
+			<key>ForceQuitAtDeadline</key>
+			<false/>
+			<!-- Reopen an app barkeep closed, once it is updated. -->
+			<key>RelaunchAfterUpdate</key>
+			<true/>
+			<!-- How often each app's update feed is checked. 15 to 10080. -->
+			<key>CheckIntervalMinutes</key>
+			<integer>240</integer>
+
+			<!-- Override the timing for particular apps (Excluded, CoolingOffHours, DeadlineDays,
+			     DeadlineBasis, EnforceDeadline, ForceQuitAtDeadline):
+			<key>AppSettings</key>
+			<dict>
+				<key>com.google.Chrome</key>
+				<dict>
+					<key>CoolingOffHours</key>
+					<integer>0</integer>
+					<key>DeadlineDays</key>
+					<integer>2</integer>
+				</dict>
+				<key>com.tinyspeck.slackmacgap</key>
+				<dict>
+					<key>EnforceDeadline</key>
+					<false/>
+				</dict>
+			</dict>
+			-->
+
+			<!-- ===== Where updates come from =====
+			     barkeep reads update feeds from the apps themselves (Sparkle's SUFeedURL,
+			     electron-builder's app-update.yml, VS Code's product.json), knows some popular
+			     apps, and reports App Store apps and apps with their own updaters (Microsoft
+			     AutoUpdate, Adobe). For anything else, or to replace what it found, add a source.
+			     Type: Sparkle, ElectronBuilder, Squirrel, GitHub, JSON, AppStore, Vendor or None.
+			     ExpectedTeamIdentifier is recommended for every source.
+			<key>AppSources</key>
+			<array>
+				<dict>
+					<key>BundleIdentifier</key>
+					<string>com.example.sparkleapp</string>
+					<key>Type</key>
+					<string>Sparkle</string>
+					<key>FeedURL</key>
+					<string>https://example.com/appcast.xml</string>
+					<key>ExpectedTeamIdentifier</key>
+					<string>ABCDE12345</string>
+				</dict>
+				<dict>
+					<key>BundleIdentifier</key>
+					<string>com.example.githubapp</string>
+					<key>Type</key>
+					<string>GitHub</string>
+					<key>Repository</key>
+					<string>example/app</string>
+					<key>AssetPattern</key>
+					<string>arm64\.dmg$</string>
+					<key>ExpectedTeamIdentifier</key>
+					<string>ABCDE12345</string>
+				</dict>
+				<dict>
+					<key>BundleIdentifier</key>
+					<string>com.example.jsonapp</string>
+					<key>Type</key>
+					<string>JSON</string>
+					<key>FeedURL</key>
+					<string>https://example.com/api/latest.json</string>
+					<key>VersionPath</key>
+					<string>release.version</string>
+					<key>ReleaseDatePath</key>
+					<string>release.date</string>
+					<key>DownloadURL</key>
+					<string>https://example.com/download/Example-{version}.dmg</string>
+					<key>ExpectedTeamIdentifier</key>
+					<string>ABCDE12345</string>
+				</dict>
+				<dict>
+					<key>BundleIdentifier</key>
+					<string>com.example.leavealone</string>
+					<key>Type</key>
+					<string>None</string>
+				</dict>
+			</array>
+			-->
+
+			<!-- ===== Protection ===== -->
+
+			<!-- Require Gatekeeper to accept each update as notarised (Developer ID, Apple or Mac
+			     App Store). Also refuses updates while Gatekeeper is turned off on the Mac. -->
+			<key>RequireGatekeeperAssessment</key>
+			<true/>
+			<!-- Allow updates delivered as installer packages (Zoom, for example). The package
+			     must be signed by the app's own developer and notarised. Packages run the
+			     vendor's scripts as root. -->
+			<key>AllowPackageInstallers</key>
+			<true/>
+			<!-- Largest download accepted, in MB. -->
+			<key>MaximumDownloadSizeMB</key>
+			<integer>2048</integer>
+			<!-- Testing only. AllowUnverifiedSignatures accepts updates whose signature Apple did
+			     not issue (the designated requirement and bundle ID still have to match);
+			     AllowFileURLs accepts file:// feeds and downloads.
+			<key>AllowUnverifiedSignatures</key>
+			<false/>
+			<key>AllowFileURLs</key>
+			<false/>
+			-->
+
+			<!-- ===== Users ===== -->
+
+			<!-- Notify users before an open app is closed for its update. Deploy the App
+			     Management profile too, so they aren't asked to allow notifications. -->
+			<key>NotifyUsers</key>
+			<true/>
+			<!-- First tell users about a waiting update this many hours before its deadline. -->
+			<key>NotifyBeforeDeadlineHours</key>
+			<integer>24</integer>
+			<!-- Let users start updates: Update Now and Check for Updates in Barkeep.app and its
+			     notifications, and barkeep update without sudo. Cooling-off still applies.
+			     false: only barkeep's own schedule (and root) installs updates. -->
+			<key>AllowUserInitiatedUpdates</key>
+			<true/>
+			<!-- Leave out to let each user choose (on by default).
+			<key>ShowInMenuBar</key>
+			<true/>
+			-->
+			<!-- Start Barkeep.app when a user logs in. Leave out to let each user choose (on by
+			     default). While it isn't running there is no launch guard, no notifications and
+			     nothing to ask an app to quit politely at its deadline, so keep it on unless
+			     EnforceDeadlines is off.
+			<key>OpenAtLogin</key>
+			<true/>
+			-->
+
+			<!-- ===== barkeep itself ===== -->
+
+			<!-- Install new barkeep releases from GitHub while the Mac is idle, once they are
+			     SelfUpdateDeferralDays old (0 to 30). Turn off to ship barkeep with your MDM. -->
+			<key>AutomaticSelfUpdates</key>
+			<true/>
+			<key>SelfUpdateDeferralDays</key>
+			<integer>7</integer>
+			<!-- Default /Library/Logs/barkeep.log
+			<key>LogFilePath</key>
+			<string>/Library/Logs/barkeep.log</string>
+			-->
+		</dict>
+	</array>
+	<key>PayloadDisplayName</key>
+	<string>barkeep</string>
+	<key>PayloadDescription</key>
+	<string>Configures barkeep, which keeps the apps on this Mac up to date.</string>
+	<key>PayloadIdentifier</key>
+	<string>uk.street365.barkeep.profile</string>
+	<key>PayloadOrganization</key>
+	<string>IT</string>
+	<key>PayloadScope</key>
+	<string>System</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>0D4F8A2C-6E1B-4A93-B7C5-9F3E1D6A2B84</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

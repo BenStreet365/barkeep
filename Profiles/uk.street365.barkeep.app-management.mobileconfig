@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Everything barkeep needs from macOS, for every version it supports (macOS 27 and later):
+     - App Management (SystemPolicyAppBundles) for the daemon, which macOS requires before one
+       process may replace another developer's app, even as root. Without it, updates exit 44.
+     - Notifications for Barkeep.app, so users aren't asked to allow them.
+     - Managed login items, so users can't turn barkeep off in System Settings > General >
+       Login Items & Extensions, and aren't told a background item was added.
+     Y633696656 is the Team ID official barkeep releases are signed with; check with:
+     codesign -dv /usr/local/bin/barkeep 2>&1 | grep TeamIdentifier
+     Only works when deployed by an MDM; a profile installed by hand cannot grant privacy access. -->
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadType</key>
+			<string>com.apple.TCC.configuration-profile-policy</string>
+			<key>PayloadIdentifier</key>
+			<string>uk.street365.barkeep.pppc.4C7A1E2B-9D3F-4B8A-A6E1-0F2D5C8B7A91</string>
+			<key>PayloadUUID</key>
+			<string>4C7A1E2B-9D3F-4B8A-A6E1-0F2D5C8B7A91</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadDisplayName</key>
+			<string>barkeep App Management</string>
+			<key>Services</key>
+			<dict>
+				<key>SystemPolicyAppBundles</key>
+				<array>
+					<!-- The daemon, started by launchd, which replaces app bundles. -->
+					<dict>
+						<key>Identifier</key>
+						<string>/usr/local/bin/barkeep</string>
+						<key>IdentifierType</key>
+						<string>path</string>
+						<key>CodeRequirement</key>
+						<string>identifier "uk.street365.barkeep" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "Y633696656"</string>
+						<key>Authorization</key>
+						<string>Allow</string>
+						<key>StaticCode</key>
+						<false/>
+					</dict>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>PayloadType</key>
+			<string>com.apple.notificationsettings</string>
+			<key>PayloadIdentifier</key>
+			<string>uk.street365.barkeep.notifications.8E3B6D1F-2A4C-4E7B-9F05-6C1D3A8B2E47</string>
+			<key>PayloadUUID</key>
+			<string>8E3B6D1F-2A4C-4E7B-9F05-6C1D3A8B2E47</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadDisplayName</key>
+			<string>Barkeep notifications</string>
+			<key>NotificationSettings</key>
+			<array>
+				<dict>
+					<key>BundleIdentifier</key>
+					<string>uk.street365.barkeep.app</string>
+					<key>NotificationsEnabled</key>
+					<true/>
+					<key>AlertType</key>
+					<integer>1</integer>
+					<key>ShowInNotificationCenter</key>
+					<true/>
+					<key>ShowInLockScreen</key>
+					<false/>
+					<key>SoundsEnabled</key>
+					<false/>
+					<key>BadgesEnabled</key>
+					<false/>
+				</dict>
+			</array>
+		</dict>
+		<dict>
+			<key>PayloadType</key>
+			<string>com.apple.servicemanagement</string>
+			<key>PayloadIdentifier</key>
+			<string>uk.street365.barkeep.loginitems.4124D391-2869-4E5A-9D1F-ECE3395175FF</string>
+			<key>PayloadUUID</key>
+			<string>4124D391-2869-4E5A-9D1F-ECE3395175FF</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadDisplayName</key>
+			<string>barkeep background items</string>
+			<key>Rules</key>
+			<array>
+				<!-- The daemon (uk.street365.barkeep.daemon) and the agent that starts Barkeep.app
+				     at login (uk.street365.barkeep.agent), both signed by this team. -->
+				<dict>
+					<key>RuleType</key>
+					<string>TeamIdentifier</string>
+					<key>RuleValue</key>
+					<string>Y633696656</string>
+					<key>Comment</key>
+					<string>barkeep daemon and Barkeep.app agent</string>
+				</dict>
+			</array>
+		</dict>
+	</array>
+	<key>PayloadDisplayName</key>
+	<string>barkeep App Management</string>
+	<key>PayloadDescription</key>
+	<string>Allows barkeep to update apps and keeps it running, and lets Barkeep.app tell users when an app will close for its update.</string>
+	<key>PayloadIdentifier</key>
+	<string>uk.street365.barkeep.pppc</string>
+	<key>PayloadOrganization</key>
+	<string>IT</string>
+	<key>PayloadScope</key>
+	<string>System</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>B5E2A9C4-7F1D-4D36-8B0E-3A6C9F2D1E58</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

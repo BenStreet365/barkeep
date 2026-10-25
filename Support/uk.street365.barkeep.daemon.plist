@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- barkeep's background service. Runs as root, always: it goes over the apps every minute
+     (cheap unless an update is waiting), checks feeds every CheckIntervalMinutes, answers
+     Barkeep.app's requests on its Mach service, and keeps barkeep itself up to date. It exits
+     when its binary is replaced, and launchd starts the new one. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>uk.street365.barkeep.daemon</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/barkeep</string>
+		<string>daemon</string>
+	</array>
+	<key>MachServices</key>
+	<dict>
+		<key>uk.street365.barkeep.daemon</key>
+		<true/>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>LowPriorityBackgroundIO</key>
+	<true/>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>uk.street365.barkeep.app</string>
+	</array>
+</dict>
+</plist>
