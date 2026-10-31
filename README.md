@@ -321,7 +321,9 @@ Barkeep.app is started in every user's session at login by a LaunchAgent, unless
   orange dot when an app is about to close;
 - opens a window listing the apps, how each updates, where its update stands, and why (a
   standard user sees the apps outside home folders and those in their own; administrators see
-  every user's);
+  every user's). Its Filter menu hides apps by status and shows or hides columns; by default it
+  hides apps with an unknown source or updated elsewhere, and the Source and Location columns.
+  Each user's choices are remembered;
 - lets users update an app now, or check for updates, if `AllowUserInitiatedUpdates` allows;
 - shows every setting in its Settings window, and lets an administrator change the ones the
   profile doesn't set (see [Settings](#settings));

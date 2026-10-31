@@ -3,6 +3,15 @@
 Release notes for barkeep. The release workflow publishes the section for each version as its
 GitHub Release notes, so write them for admins.
 
+## 0.2.0
+
+### Added
+
+- A Filter menu in Barkeep.app's window chooses which apps to show by status, and whether to
+  show the Source and Location columns. By default it hides apps with an unknown source and
+  apps updated elsewhere, and the Source and Location columns. Each user's choices, including
+  All Apps or Updates and the table's column order and widths, are remembered.
+
 ## 0.1.1
 
 ### Added

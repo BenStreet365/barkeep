@@ -19,12 +19,50 @@ struct MainView: View {
     let model: BarModel
     @Bindable var selection: Selection
     let delegate: AppDelegate
-    @State private var filter: AppFilter = .all
+    // The filter, the statuses hidden and the table's columns are remembered between launches.
+    @AppStorage("AppFilter") private var filter: AppFilter = .all
+    @AppStorage("HiddenStatuses") private var hiddenStatusList = [AppStatus.noSource, .managedElsewhere].map(\.rawValue).joined(separator: ",")
+    @AppStorage("TableColumns") private var columnData = Data()
     @State private var search = ""
     @State private var sortOrder = [KeyPathComparator(\AppRecord.app.name, comparator: .localizedStandard)]
 
+    var hiddenStatuses: Set<AppStatus> {
+        Set(hiddenStatusList.split(separator: ",").compactMap { AppStatus(rawValue: String($0)) })
+    }
+
+    func shows(_ status: AppStatus) -> Binding<Bool> {
+        Binding {
+            !hiddenStatuses.contains(status)
+        } set: { shown in
+            var hidden = hiddenStatuses
+            if shown { hidden.remove(status) } else { hidden.insert(status) }
+            hiddenStatusList = AppStatus.allCases.filter(hidden.contains).map(\.rawValue).joined(separator: ",")
+        }
+    }
+
+    /// Which columns are shown, their order and widths. Source and Location start hidden.
+    var columns: Binding<TableColumnCustomization<AppRecord>> {
+        Binding {
+            (try? JSONDecoder().decode(TableColumnCustomization<AppRecord>.self, from: columnData)) ?? TableColumnCustomization()
+        } set: {
+            columnData = (try? JSONEncoder().encode($0)) ?? Data()
+        }
+    }
+
+    func shows(column id: String, hiddenByDefault: Bool) -> Binding<Bool> {
+        Binding {
+            switch columns.wrappedValue[visibility: id] {
+            case .visible: true
+            case .hidden: false
+            default: !hiddenByDefault
+            }
+        } set: {
+            columns.wrappedValue[visibility: id] = $0 ? .visible : .hidden
+        }
+    }
+
     var rows: [AppRecord] {
-        model.apps.filter { filter.includes($0) }
+        model.apps.filter { filter.includes($0) && !hiddenStatuses.contains($0.status) }
             .filter { search.isEmpty || $0.app.name.localizedCaseInsensitiveContains(search) || $0.app.bundleIdentifier.localizedCaseInsensitiveContains(search) }
             .sorted(using: sortOrder)
     }
@@ -50,6 +88,9 @@ struct MainView: View {
                 .pickerStyle(.segmented)
             }
             ToolbarItem {
+                filterMenu
+            }
+            ToolbarItem {
                 Button {
                     model.checkNow()
                 } label: {
@@ -59,6 +100,24 @@ struct MainView: View {
                 .help(model.userUpdatesAllowed ? "Check every app's update feed now" : "Turned off by your administrator")
             }
         }
+    }
+
+    var filterMenu: some View {
+        let hiddenCount = model.apps.filter { filter.includes($0) && hiddenStatuses.contains($0.status) }.count
+        return Menu {
+            Section("Show Apps That Are") {
+                ForEach(AppStatus.allCases, id: \.self) { status in
+                    Toggle(status.label, isOn: shows(status))
+                }
+            }
+            Section("Columns") {
+                Toggle("Source", isOn: shows(column: "source", hiddenByDefault: true))
+                Toggle("Location", isOn: shows(column: "location", hiddenByDefault: true))
+            }
+        } label: {
+            Label("Filter", systemImage: hiddenStatuses.isEmpty ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+        }
+        .help(hiddenCount == 0 ? "Choose which apps and columns to show" : "\(hiddenCount) apps hidden by the filter")
     }
 
     var header: some View {
@@ -87,7 +146,7 @@ struct MainView: View {
     }
 
     var table: some View {
-        Table(rows, selection: $selection.path, sortOrder: $sortOrder) {
+        Table(rows, selection: $selection.path, sortOrder: $sortOrder, columnCustomization: columns) {
             TableColumn("App", value: \.app.name) { record in
                 HStack(spacing: 6) {
                     AppIcon(path: record.app.path, size: 18)
@@ -95,18 +154,27 @@ struct MainView: View {
                 }
             }
             .width(min: 140, ideal: 200)
+            .customizationID("app")
+            .disabledCustomizationBehavior(.visibility)
             TableColumn("Installed", value: \.app.displayVersion) { Text($0.app.displayVersion).monospacedDigit().help($0.app.displayVersion) }
                 .width(min: 80, ideal: 130)
+                .customizationID("installed")
             TableColumn("Available") { record in Text(record.available?.displayVersion ?? "").monospacedDigit() }
                 .width(min: 80, ideal: 110)
+                .customizationID("available")
             TableColumn("Status", value: \.status.rawValue) { record in StatusLabel(status: record.status) }
             .width(min: 110, ideal: 130)
+            .customizationID("status")
             TableColumn("Source") { record in Text(record.source?.definition.kind.rawValue ?? "—").foregroundStyle(.secondary) }
                 .width(min: 70, ideal: 100)
+                .customizationID("source")
+                .defaultVisibility(.hidden)
             TableColumn("Location", value: \.app.path) { record in
                 Text(location(record.app.path)).foregroundStyle(.secondary).help(record.app.path)
             }
             .width(min: 90, ideal: 130)
+            .customizationID("location")
+            .defaultVisibility(.hidden)
         }
     }
 
