@@ -1,4 +1,5 @@
 # Builds and tests every push and pull request. Ad-hoc signed; uses no secrets.
+# The release workflow runs it too, and signs nothing unless it passes.
 # Changes only to the website or Markdown skip it: neither goes into the build. Cloudflare Pages
 # previews the website on its own.
 name: CI
@@ -9,6 +10,7 @@ on:
     paths-ignore: ['site/**', '**.md']
   pull_request:
     paths-ignore: ['site/**', '**.md']
+  workflow_call:
 
 permissions:
   contents: read

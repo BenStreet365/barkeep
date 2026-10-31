@@ -75,9 +75,16 @@ final class LocalSettingsTests: XCTestCase {
         XCTAssertEqual(auth, Data([1, 2]))
         XCTAssertFalse(SettingsAuthorization.verify(Data([1, 2])), "not an authorization")
         XCTAssertFalse(SettingsAuthorization.verify(Data(count: 32)), "an empty external form holds nothing")
+    }
 
-        // A real authorization that nobody entered a password for: what a process running as an
-        // administrator could send without asking anyone.
+    /// A real authorization that nobody entered a password for: what a process running as an
+    /// administrator could send without asking anyone. Only the daemon (as root) defines the
+    /// right; without it macOS uses its default rule, which can reuse an administrator's recent
+    /// password, so the answer would depend on the machine. Runs where barkeep is installed.
+    func testAnAuthorizationNobodyEnteredAPasswordForIsRefused() throws {
+        var definition: CFDictionary?
+        try XCTSkipUnless(AuthorizationRightGet(SettingsAuthorization.right, &definition) == errAuthorizationSuccess,
+                          "\(SettingsAuthorization.right) is not defined on this Mac")
         var empty: AuthorizationRef?
         XCTAssertEqual(AuthorizationCreate(nil, nil, [], &empty), errAuthorizationSuccess)
         defer { empty.map { _ = AuthorizationFree($0, []) } }

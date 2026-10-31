@@ -3,6 +3,9 @@
 # Triggered by pushing a tag that matches the version in Support/Info.plist:
 #   git tag v0.1.0 && git push origin v0.1.0
 #
+# CI (ci.yml) runs first, on the tagged commit. The release job waits for it, so it asks for
+# approval and unlocks the signing keys only once the build and tests have passed.
+#
 # Secrets live in the "release" environment (Settings → Environments), so only this job can read
 # them. The environment requires approval from @BenStreet365 and accepts only v* tags, and a tag
 # ruleset stops anyone else creating v* tags.
@@ -20,7 +23,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   release:
+    needs: ci
     runs-on: xcode-27
     timeout-minutes: 60
     environment: release
@@ -64,10 +71,6 @@ jobs:
             echo "::error::CHANGELOG.md has no notes under '## $VERSION'"
             exit 1
           fi
-
-      - name: Unit tests
-        timeout-minutes: 10
-        run: swift test
 
       - name: Import signing certificates
         env:
