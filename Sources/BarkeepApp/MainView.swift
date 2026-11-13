@@ -23,6 +23,7 @@ struct MainView: View {
     @AppStorage("AppFilter") private var filter: AppFilter = .all
     @AppStorage("HiddenStatuses") private var hiddenStatusList = [AppStatus.noSource, .managedElsewhere].map(\.rawValue).joined(separator: ",")
     @AppStorage("TableColumns") private var columnData = Data()
+    @AppStorage("ShowsInspector") private var showsInspector = true
     @State private var search = ""
     @State private var sortOrder = [KeyPathComparator(\AppRecord.app.name, comparator: .localizedStandard)]
 
@@ -67,38 +68,82 @@ struct MainView: View {
             .sorted(using: sortOrder)
     }
 
+    var selected: AppRecord? {
+        selection.path.flatMap { path in model.apps.first { $0.app.path == path } }
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            table
-            // The selected app's details, under the table.
-            if let path = selection.path, let record = model.apps.first(where: { $0.app.path == path }) {
-                Divider()
-                AppDetail(record: record, model: model, delegate: delegate)
-                    .frame(height: 250)
+        table
+            .overlay { if rows.isEmpty { emptyState } }
+            // What a request to the daemon is doing, or why it failed.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let banner = model.banner { BannerBar(text: banner, working: model.checking || !model.updating.isEmpty) { model.banner = nil } }
             }
-        }
-        .searchable(text: $search, placement: .toolbar, prompt: "Search apps")
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("Show", selection: $filter) {
-                    ForEach(AppFilter.allCases) { Text($0.rawValue).tag($0) }
+            // The selected app's details, in the standard trailing inspector.
+            .inspector(isPresented: $showsInspector) {
+                Group {
+                    if let selected {
+                        AppDetail(record: selected, model: model, delegate: delegate)
+                    } else {
+                        ContentUnavailableView("No App Selected", systemImage: "app.dashed",
+                                               description: Text("Select an app to see how it updates and where its update stands."))
+                    }
                 }
-                .pickerStyle(.segmented)
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 460)
             }
-            ToolbarItem {
-                filterMenu
-            }
-            ToolbarItem {
-                Button {
-                    model.checkNow()
-                } label: {
-                    Label("Check for Updates", systemImage: "arrow.clockwise")
+            .navigationTitle("Barkeep")
+            .navigationSubtitle(subtitle)
+            .searchable(text: $search, placement: .toolbar, prompt: "Search apps")
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Picker("Show", selection: $filter) {
+                        ForEach(AppFilter.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .help("Show every app, or only those with an update")
                 }
-                .disabled(model.checking || !model.userUpdatesAllowed)
-                .help(model.userUpdatesAllowed ? "Check every app's update feed now" : "Turned off by your administrator")
+                ToolbarItem {
+                    Button {
+                        model.checkNow()
+                    } label: {
+                        Label("Check for Updates", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(model.checking || !model.userUpdatesAllowed)
+                    .help(model.userUpdatesAllowed ? "Check every app's update feed now" : "Turned off by your administrator")
+                }
+                ToolbarItem {
+                    filterMenu
+                }
+                ToolbarItem {
+                    Button {
+                        showsInspector.toggle()
+                    } label: {
+                        Label("Details", systemImage: "sidebar.trailing")
+                    }
+                    .help(showsInspector ? "Hide the selected app's details" : "Show the selected app's details")
+                }
             }
+    }
+
+    /// Under the window's title: how the bar is.
+    var subtitle: String {
+        guard let state = model.state else { return "Waiting for Barkeep's service" }
+        let checked = state.lastCheck.map { "checked \($0.formatted(.relative(presentation: .named)))" } ?? "not checked yet"
+        return "\(model.summary) · \(checked)"
+    }
+
+    @ViewBuilder var emptyState: some View {
+        if model.state == nil {
+            ContentUnavailableView("Waiting for Barkeep's Service", systemImage: "hourglass",
+                                   description: Text("The background service (\(Daemon.label)) hasn't reported yet. It starts with the Mac and looks for apps straight away."))
+        } else if !search.isEmpty {
+            ContentUnavailableView.search(text: search)
+        } else if filter == .updates, !model.apps.contains(where: { filter.includes($0) }) {
+            ContentUnavailableView("No Updates Waiting", systemImage: "checkmark.seal",
+                                   description: Text("Every app Barkeep looks after is up to date."))
+        } else {
+            ContentUnavailableView("No Apps to Show", systemImage: "line.3.horizontal.decrease.circle",
+                                   description: Text("The Filter menu is hiding every app here."))
         }
     }
 
@@ -120,37 +165,12 @@ struct MainView: View {
         .help(hiddenCount == 0 ? "Choose which apps and columns to show" : "\(hiddenCount) apps hidden by the filter")
     }
 
-    var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: model.waiting.isEmpty ? "checkmark.seal.fill" : "arrow.down.circle.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(model.waiting.isEmpty ? .green : .accentColor)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.summary).font(.title3.weight(.semibold))
-                Group {
-                    if let state = model.state {
-                        Text("\(state.apps.count) apps found · last checked \(state.lastCheck.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "never")")
-                    } else {
-                        Text("Waiting for the barkeep service (\(Daemon.label)) to report")
-                    }
-                }
-                .font(.callout).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if let banner = model.banner {
-                Text(banner).font(.callout).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth: 320, alignment: .trailing)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-
     var table: some View {
         Table(rows, selection: $selection.path, sortOrder: $sortOrder, columnCustomization: columns) {
             TableColumn("App", value: \.app.name) { record in
                 HStack(spacing: 6) {
                     AppIcon(path: record.app.path, size: 18)
-                    Text(record.app.name.replacingOccurrences(of: ".app", with: ""))
+                    Text(record.app.displayName)
                 }
             }
             .width(min: 140, ideal: 200)
@@ -211,86 +231,145 @@ struct StatusLabel: View {
     }
 }
 
+/// What a request to the daemon is doing, or why it failed, along the bottom of the window.
+struct BannerBar: View {
+    let text: String
+    let working: Bool
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if working {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+            }
+            Text(text).font(.callout).lineLimit(2).textSelection(.enabled)
+            Spacer()
+            if !working {
+                Button("Dismiss", systemImage: "xmark", action: dismiss)
+                    .labelStyle(.iconOnly).buttonStyle(.borderless)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+}
+
+/// The inspector: one app, how it updates and where its update stands.
 struct AppDetail: View {
     let record: AppRecord
     let model: BarModel
     let delegate: AppDelegate
+    @AppStorage("ShowsMoreInfo") private var showsMoreInfo = false
+
+    var canUpdate: Bool {
+        record.available != nil && model.userUpdatesAllowed && ![.coolingOff, .installing, .managedElsewhere].contains(record.status)
+    }
+
+    /// The release that will be installed, when it isn't the newest one.
+    var next: AvailableUpdate? {
+        guard let selected = record.selected, let available = record.available, !selected.isSameRelease(as: available) else { return nil }
+        return selected
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                AppIcon(path: record.app.path, size: 40)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 8) {
-                        Text(record.app.name.replacingOccurrences(of: ".app", with: "")).font(.title3.weight(.semibold))
-                        Label(record.status.label, systemImage: record.status.symbol).font(.callout).foregroundStyle(.secondary)
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 12) {
+                        AppIcon(path: record.app.path, size: 48)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(record.app.displayName).font(.title3.weight(.semibold)).lineLimit(2)
+                            StatusLabel(status: record.status).font(.callout)
+                        }
                     }
-                    Text(record.message).font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    Text(record.message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        if canUpdate {
+                            Button(model.updating.contains(record.app.path) ? "Updating…" : "Update Now") { delegate.confirmAndUpdate(record) }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(model.updating.contains(record.app.path))
+                        }
+                        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([record.app.url]) }
+                    }
                 }
-                Spacer()
-                if record.available != nil, model.userUpdatesAllowed, ![.coolingOff, .installing, .managedElsewhere].contains(record.status) {
-                    Button(model.updating.contains(record.app.path) ? "Updating…" : "Update Now") { delegate.confirmAndUpdate(record) }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(model.updating.contains(record.app.path))
-                }
-                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([record.app.url]) }
             }
-            ScrollView {
-                HStack(alignment: .top, spacing: 24) {
-                    section("Version") {
-                        row("Installed", record.app.displayVersion)
-                        if let available = record.available {
-                            row("Available", available.displayVersion)
-                            row("Released", available.releaseDate.map(date) ?? "Not in the feed")
-                            row("Found", record.firstSeen.map(date))
-                            row("Installs after", record.installableAfter.map(date))
-                            row("Deadline", record.deadline.map(date) ?? "None")
-                        }
-                        row("Last updated", record.lastUpdated.map(date))
-                        row("Previous", record.previousVersion)
+            Section("Version") {
+                row("Installed", record.app.displayVersion)
+                if let available = record.available {
+                    row("Available", available.displayVersion)
+                    if let next {
+                        row("Installing next", next.displayVersion)
+                        Text("This app releases often. Barkeep installs the newest release that has finished cooling off, then moves on to the next.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
-                    section("Update source") {
-                        if let source = record.source {
-                            row("Type", source.definition.kind.rawValue)
-                            row("Found from", source.evidence)
-                            row("Feed", source.definition.feedURL ?? source.definition.repository)
-                            row("Expected team", source.definition.expectedTeamIdentifier)
-                            row("Last checked", record.lastChecked.map(date))
-                        } else {
-                            Text("Barkeep doesn't know where this app's updates come from. An administrator can add it to AppSources in the profile.")
-                                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        }
+                    row("Released", (next ?? available).releaseDate.map(date) ?? "Not in the feed")
+                    row("Found", record.firstSeen.map(date))
+                    row("Installs after", record.installableAfter.map(date))
+                    row("Deadline", record.deadline.map(date) ?? "None")
+                }
+                row("Last updated", record.lastUpdated.map(date))
+                row("Previous", record.previousVersion)
+            }
+            // Where its updates come from and what it is: there when wanted, out of the way otherwise.
+            Section {
+                Button {
+                    withAnimation { showsMoreInfo.toggle() }
+                } label: {
+                    HStack {
+                        Text("More Info")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(showsMoreInfo ? 90 : 0))
                     }
-                    section("Identity") {
-                        row("Bundle ID", record.app.bundleIdentifier)
-                        row("Location", record.app.path)
-                        row("Team ID", record.app.teamID)
-                        row("Architectures", record.app.metadata.architectures.joined(separator: ", "))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(showsMoreInfo ? "Expanded" : "Collapsed")
+                .help(showsMoreInfo ? "Hide the update source and identity" : "Show the update source and identity")
+            }
+            if showsMoreInfo {
+                Section("Update Source") {
+                    if let source = record.source {
+                        row("Type", source.definition.kind.rawValue)
+                        row("Found from", source.evidence)
+                        row("Feed", source.definition.feedURL ?? source.definition.repository)
+                        row("Expected team", source.definition.expectedTeamIdentifier)
+                        row("Last checked", record.lastChecked.map(date))
+                    } else {
+                        Text("Barkeep doesn't know where this app's updates come from. An administrator can add it to AppSources in the profile.")
+                            .font(.callout).foregroundStyle(.secondary)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Section("Identity") {
+                    row("Bundle ID", record.app.bundleIdentifier)
+                    row("Location", record.app.path)
+                    row("Team ID", record.app.teamID)
+                    row("Architectures", record.app.metadata.architectures.joined(separator: ", "))
+                }
             }
         }
-        .padding(16)
+        .formStyle(.grouped)
     }
 
     func date(_ d: Date) -> String { d.formatted(date: .abbreviated, time: .shortened) }
 
-    func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-            content()
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-
     @ViewBuilder func row(_ label: String, _ value: String?) -> some View {
         if let value, !value.isEmpty {
-            HStack(alignment: .firstTextBaseline) {
-                Text(label).foregroundStyle(.secondary).frame(width: 96, alignment: .leading)
-                Text(value).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            LabeledContent(label) {
+                Text(value).textSelection(.enabled).multilineTextAlignment(.trailing)
             }
-            .font(.callout)
         }
+    }
+}
+
+extension InstalledApp {
+    /// The app's name as Finder shows it, without ".app".
+    var displayName: String {
+        name.hasSuffix(".app") ? String(name.dropLast(4)) : name
     }
 }

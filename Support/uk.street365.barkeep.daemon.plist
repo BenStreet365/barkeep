@@ -3,7 +3,8 @@
 <!-- barkeep's background service. Runs as root, always: it goes over the apps every minute
      (cheap unless an update is waiting), checks feeds every CheckIntervalMinutes, answers
      Barkeep.app's requests on its Mach service, and keeps barkeep itself up to date. It exits
-     when its binary is replaced, and launchd starts the new one. -->
+     when its binary is replaced, or if a pass has been stuck for hours, and launchd starts it
+     again. -->
 <plist version="1.0">
 <dict>
 	<key>Label</key>

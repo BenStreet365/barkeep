@@ -49,36 +49,101 @@ extension CodeSignature {
 
 /// Gatekeeper and installer package checks, shared by app updates and barkeep's own updates.
 public enum Gatekeeper {
+    /// Whether Gatekeeper is assessing code on this Mac. An administrator or a profile can turn it off.
+    public enum Mode: String, Codable, Sendable {
+        case enabled, disabled, unknown
+    }
+
+    /// What `spctl --assess` said about some code.
+    enum Assessment: Equatable {
+        /// Gatekeeper looked, and Apple vouches for the code.
+        case notarised
+        /// Gatekeeper is turned off on this Mac, so it accepted the code without looking.
+        case notPerformed
+        case rejected(String)
+    }
+
     /// Gatekeeper sources that mean Apple vouched for the code: notarised Developer ID, Apple's
     /// own code or the Mac App Store.
     static let trustedSources: Set<String> = ["Notarized Developer ID", "Apple System", "Mac App Store"]
 
-    /// Throws unless Gatekeeper accepts `url` (an app, or with `type` "install" a package) as
-    /// notarised.
-    public static func assess(_ url: URL, type: String = "execute") throws {
+    /// The same three, as code requirements, for a Mac where Gatekeeper is off and cannot be asked.
+    /// `notarized` holds only if Apple's notary service issued a ticket for exactly this code.
+    static let notarisedRequirements = [
+        "anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate 1[field.1.2.840.113635.100.6.2.6] exists and notarized",
+        "anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.9] exists",
+        "anchor apple",
+    ]
+
+    /// The Mac's Gatekeeper setting, from `spctl --status`.
+    public static func mode() -> Mode {
+        guard let result = try? Command.run("/usr/sbin/spctl", ["--status"], timeout: 30), !result.timedOut else { return .unknown }
+        return mode(fromStatus: result.stdoutString + result.stderrString)
+    }
+
+    static func mode(fromStatus output: String) -> Mode {
+        let text = output.lowercased()
+        if text.contains("assessments enabled") { return .enabled }
+        if text.contains("assessments disabled") { return .disabled }
+        return .unknown
+    }
+
+    /// Throws unless Apple vouches for `url` (an app, or with `type` "install" a package) as
+    /// notarised. Gatekeeper is asked first. Where it is turned off it accepts everything without
+    /// looking, which proves nothing, so barkeep then checks the notarisation itself: Apple's
+    /// notarisation is required either way, and a Mac without Gatekeeper still gets its updates.
+    public static func assess(_ url: URL, type: String = "execute", log: Log? = nil) throws {
         let result = try Command.run("/usr/sbin/spctl", ["--assess", "--type", type, "-vv", url.path], timeout: 300)
         let detail = (result.stderrString + result.stdoutString).trimmingCharacters(in: .whitespacesAndNewlines)
         if result.timedOut { throw BarkeepError(.gatekeeperRejected, "Gatekeeper took too long to assess \(url.lastPathComponent)") }
-        if let reason = rejection(status: result.status, output: detail) {
+        switch assessment(status: result.status, output: detail) {
+        case .notarised:
+            return
+        case .rejected(let reason):
             throw BarkeepError(.gatekeeperRejected, "Gatekeeper rejected \(url.lastPathComponent): \(reason)")
+        case .notPerformed:
+            guard try isNotarised(url, package: type == "install") else {
+                throw BarkeepError(.gatekeeperRejected,
+                                   "\(url.lastPathComponent) is not notarised by Apple (Gatekeeper is turned off on this Mac, so barkeep checked for itself); set RequireGatekeeperAssessment to false to update without it")
+            }
+            log?.info("Gatekeeper is turned off on this Mac; barkeep checked for itself that \(url.lastPathComponent) is notarised")
         }
     }
 
-    /// Why `spctl --assess` output is not proof of notarisation, or nil if it is. A zero exit
-    /// status is not enough: with Gatekeeper disabled on the Mac, or a local `spctl --add` rule,
-    /// spctl accepts anything ("override=security disabled", or the rule's label as source).
-    static func rejection(status: Int32, output: String) -> String? {
+    /// Whether Apple notarised `url`, found without Gatekeeper: for code, from its signature and
+    /// notarisation ticket; for a package, from `pkgutil`.
+    static func isNotarised(_ url: URL, package: Bool) throws -> Bool {
+        if package {
+            let result = try Command.run("/usr/sbin/pkgutil", ["--check-signature", url.path], timeout: 120)
+            return result.status == 0 && !result.timedOut && packageIsNotarised(fromCheckSignature: result.stdoutString)
+        }
+        return notarisedRequirements.contains { CodeSignature.satisfies(url, requirement: $0) }
+    }
+
+    /// Whether `pkgutil --check-signature` output says Apple's notary service trusts the package.
+    static func packageIsNotarised(fromCheckSignature output: String) -> Bool {
+        output.split(separator: "\n").contains { line in
+            let text = line.trimmingCharacters(in: .whitespaces)
+            return text.hasPrefix("Notarization:") && text.contains("trusted by the Apple notary service")
+        }
+    }
+
+    /// What `spctl --assess` output proves. A zero exit status is not enough: with Gatekeeper
+    /// turned off spctl accepts anything ("override=security disabled"), and with a local
+    /// `spctl --add` rule it gives the rule's label as the source.
+    static func assessment(status: Int32, output: String) -> Assessment {
         let flat = output.replacingOccurrences(of: "\n", with: "; ")
-        guard status == 0 else { return flat }
         let lines = output.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
         if let override = lines.first(where: { $0.hasPrefix("override=") }) {
-            return "assessment was not performed (\(override)); set RequireGatekeeperAssessment to false to update without it"
+            if status == 0, override == "override=security disabled" { return .notPerformed }
+            return .rejected("assessment was not performed (\(override))")
         }
+        guard status == 0 else { return .rejected(flat) }
         let source = lines.first(where: { $0.hasPrefix("source=") }).map { String($0.dropFirst("source=".count)) }
         guard let source, trustedSources.contains(source) else {
-            return "source \(source ?? "unknown") is not notarised by Apple (\(flat))"
+            return .rejected("source \(source ?? "unknown") is not notarised by Apple (\(flat))")
         }
-        return nil
+        return .notarised
     }
 
     /// The Team ID of the Developer ID Installer certificate that signed a flat package, if it

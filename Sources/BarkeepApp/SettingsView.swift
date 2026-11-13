@@ -74,8 +74,8 @@ struct SettingsView: View {
 
             Section("Protection") {
                 LabeledContent("Same developer as the installed app", value: "Always required")
-                toggle(Key.requireGatekeeperAssessment, "Require Gatekeeper to accept each update", value: config.requireGatekeeperAssessment,
-                       note: config.requireGatekeeperAssessment ? nil : "Updates that aren't notarised will be installed.")
+                toggle(Key.requireGatekeeperAssessment, "Require each update to be notarised by Apple", value: config.requireGatekeeperAssessment,
+                       note: gatekeeperNote)
                 toggle(Key.allowPackageInstallers, "Allow installer packages", value: config.allowPackageInstallers,
                        note: "Only if signed by the app's own developer. Packages run their scripts as root.")
                 number(Key.maximumDownloadSizeMB, "Largest download", value: config.maximumDownloadSizeMB, unit: "MB", range: 1...20480)
@@ -109,6 +109,17 @@ struct SettingsView: View {
             openAtLogin = delegate.opensAtLogin
         }
         .onDisappear { authorizer.lock() }
+    }
+
+    /// How the notarisation check is made on this Mac: by Gatekeeper, or with Gatekeeper turned
+    /// off, by Barkeep itself.
+    var gatekeeperNote: String? {
+        guard config.requireGatekeeperAssessment else { return "Updates that aren't notarised will be installed." }
+        switch model.state?.gatekeeper {
+        case .disabled?: return "Gatekeeper is turned off on this Mac, so Barkeep checks each update's notarisation itself."
+        case .enabled?: return "Gatekeeper checks each update before it's installed."
+        default: return nil
+        }
     }
 
     // MARK: The lock

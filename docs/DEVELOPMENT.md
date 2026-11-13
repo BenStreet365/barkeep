@@ -43,7 +43,10 @@ and shadows.
 EdDSA, archive detection, the timing policy, source detection order, and real updates of ad-hoc
 signed fixture apps: the happy path, wrong bundle ID, a copy that doesn't satisfy the designated
 requirement, ad-hoc refusal, downgrades, checksum and EdDSA failures, a running app, a whole pass
-with cooling-off, leases, and who may see which apps (each user's view of the state, and the permissions of the state and leases). Fixtures are signed with an explicit designated requirement
+with cooling-off, an app that releases every day (the newest cooled-off release is installed, a
+download that has become a newer release is refused, a withdrawn release is forgotten), the seal
+on the state (an edited state is thrown away), reading Gatekeeper's answer when it is turned off,
+leases, and who may see which apps (each user's view of the state, and the permissions of the state and leases). Fixtures are signed with an explicit designated requirement
 (`identifier "<bundle ID>"`), so the requirement check works as it does for Developer ID apps.
 
 Root-only paths aren't covered: helpers that drop to a user, installer packages, the daemon and
@@ -77,6 +80,10 @@ What to check, with old versions of real apps (all public downloads):
 | Deadline, polite quit, reopen | `AppSettings` with `CoolingOffHours` 0 and `DeadlineDays` 0, and `DeadlineGraceMinutes` 2; open the app and watch `barkeep status` |
 | Open at login | `OpenAtLogin` false in the profile: at the next login Barkeep.app starts and exits at once, and `launchctl print gui/$UID/uk.street365.barkeep.agent` shows it not running. Left out: the Settings toggle works and takes effect at the next login |
 | Permissions profile | Deployed by MDM: updates of another developer's app succeed (not exit 44), no notification permission prompt, and barkeep can't be turned off in Login Items & Extensions |
+| Gatekeeper turned off | `sudo spctl --master-disable`, then confirm in System Settings → Privacy & Security (or deploy a `com.apple.systempolicy.control` profile with `EnableAssessment` false). A notarised update still installs, and the log says barkeep checked the notarisation itself; the fake update above is still refused. Settings → Protection says Gatekeeper is off. Turn it back on afterwards |
+| Frequent releases | A `JSON` source with `AllowFileURLs` and `{version}` in `DownloadURL`, `CoolingOffHours` 1: publish 1.1, then 1.2 half an hour later. 1.1 installs when it is an hour old, although 1.2 is newer; `barkeep status` says which is next |
+| The seal | Edit a date in `State.json` as root: the next pass logs that it isn't using the state, and nothing installs early. `Seal.key` and `State.seal` are mode 600 `root` |
+| Staying running | In Barkeep.app, Command-Q closes the window and the menu bar icon stays. A right click on the icon shows Check for Updates, Open Barkeep, Settings, About Barkeep and Quit; Quit stops it (`launchctl print gui/$UID/uk.street365.barkeep.agent` shows it not running) until the next login. `kill -9` of Barkeep or the daemon: launchd starts it again. Logging out isn't held up |
 | Launch guard | Write a lease for an app into `/Library/Application Support/uk.street365.barkeep/Leases` (root-owned, see `UpdateLease`), open the app: it closes, and reopens when the lease expires |
 | Upgrades | Install a newer build over the old: the daemon restarts itself and the agent is reloaded |
 | barkeep's own updates | Build a higher version (bump `Support/Info.plist`), write a `releases.json` (below), and run `barkeep self-update --feed … --allow-unsigned` as root: it installs, and the daemon restarts into it. A wrong `.sha256`, or a package published under another version's tag, is refused (exit 52) |

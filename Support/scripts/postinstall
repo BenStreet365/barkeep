@@ -7,6 +7,8 @@
 # /usr/local/bin belongs to a user. Say so now rather than leave the daemon failing.
 /usr/local/bin/barkeep show-config > /dev/null || echo "barkeep will not run as root until the problem above is fixed" >&2
 LABEL=uk.street365.barkeep.daemon
+# Switched back on if someone turned it off with launchctl: barkeep is meant to run always.
+/bin/launchctl enable "system/$LABEL" > /dev/null 2>&1
 /bin/launchctl print "system/$LABEL" > /dev/null 2>&1 || /bin/launchctl bootstrap system "/Library/LaunchDaemons/$LABEL.plist" || echo "Could not load $LABEL" >&2
 
 AGENT=uk.street365.barkeep.agent
@@ -16,6 +18,7 @@ if [ -f "/Library/LaunchAgents/$AGENT.plist" ]; then
         # Loaded again even when already loaded: launchd ties the agent to the code it first saw,
         # and a new Barkeep.app must be registered afresh. The agent installs nothing, so
         # stopping it here interrupts no update.
+        /bin/launchctl enable "gui/$CONSOLE_UID/$AGENT" > /dev/null 2>&1
         /bin/launchctl bootout "gui/$CONSOLE_UID/$AGENT" > /dev/null 2>&1
         /bin/launchctl bootstrap "gui/$CONSOLE_UID" "/Library/LaunchAgents/$AGENT.plist" || echo "Could not load $AGENT" >&2
     fi

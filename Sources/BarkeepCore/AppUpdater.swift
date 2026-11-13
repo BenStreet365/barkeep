@@ -48,9 +48,12 @@ public final class AppUpdater {
         isRoot ? Visibility.local().owner(of: app.path)?.uid : nil
     }
 
-    public func update(_ app: InstalledApp, to update: AvailableUpdate, source: ResolvedSource) -> UpdateOutcome {
+    /// `pinned` says `update` is not the newest release, and was chosen because it has cooled
+    /// off: the download must then hold that release and nothing newer, in case its address now
+    /// serves a later one.
+    public func update(_ app: InstalledApp, to update: AvailableUpdate, source: ResolvedSource, pinned: Bool = false) -> UpdateOutcome {
         do {
-            let version = try perform(app, update, source)
+            let version = try perform(app, update, source, pinned: pinned)
             return UpdateOutcome(result: .updated, exitCode: 0,
                                  message: "Updated \(app.name) from \(app.displayVersion) to \(version) at \(app.path)", newVersion: version)
         } catch let error as BarkeepError where error.status == .appRunning {
@@ -62,7 +65,8 @@ public final class AppUpdater {
         }
     }
 
-    func perform(_ app: InstalledApp, _ update: AvailableUpdate, _ source: ResolvedSource) throws -> String {
+    func perform(_ app: InstalledApp, _ update: AvailableUpdate, _ source: ResolvedSource, pinned: Bool = false) throws -> String {
+        let limit = pinned ? update : nil
         guard source.definition.kind.installs, let raw = update.downloadURL, let url = URL(string: raw) else {
             throw BarkeepError(.noUpdateSource, "\(app.name) is updated by \(source.definition.note ?? source.definition.kind.rawValue), not barkeep")
         }
@@ -87,19 +91,19 @@ public final class AppUpdater {
             // installer only accepts a path ending in .pkg.
             let package = work.appendingPathComponent("update.pkg")
             try FileManager.default.moveItem(at: download, to: package)
-            return try installPackage(package, app: app, update: update, source: source.definition)
+            return try installPackage(package, app: app, update: update, source: source.definition, pinned: pinned)
         case .diskImage:
             try DiskImage.preflight(download.path, acceptLicense: true)
             let image = try DiskImage(attaching: download.path, log: log)
             defer { image.detach() }
             let found = try Archive.findApp(bundleID: app.bundleIdentifier, in: image.volumes)
-            return try installApp(found, replacing: app, source: source.definition)
+            return try installApp(found, replacing: app, source: source.definition, notNewerThan: limit)
         case .zip, .tar:
             let extracted = work.appendingPathComponent("extracted")
             try FileManager.default.createDirectory(at: extracted, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
             try Archive.extract(download, kind: kind, into: extracted)
             let found = try Archive.findApp(bundleID: app.bundleIdentifier, in: [extracted])
-            return try installApp(found, replacing: app, source: source.definition)
+            return try installApp(found, replacing: app, source: source.definition, notNewerThan: limit)
         }
     }
 
@@ -149,7 +153,8 @@ public final class AppUpdater {
 
     /// The checks a new copy must pass to replace `app`. `candidate` must be a copy only root (or
     /// barkeep's user) can change, so what is checked is what gets installed.
-    func verifyCandidate(_ candidate: URL, replacing app: InstalledApp, source: AppSourceDefinition) throws -> (AppBundle, SigningInfo) {
+    func verifyCandidate(_ candidate: URL, replacing app: InstalledApp, source: AppSourceDefinition,
+                         notNewerThan limit: AvailableUpdate? = nil) throws -> (AppBundle, SigningInfo) {
         let bundle = try AppBundle(url: candidate)
         guard bundle.bundleIdentifier == app.bundleIdentifier else {
             throw BarkeepError(.bundleIDMismatch, "The update has bundle ID \(bundle.bundleIdentifier), not \(app.bundleIdentifier)")
@@ -179,7 +184,7 @@ public final class AppUpdater {
             }
         }
         if config.requireGatekeeperAssessment {
-            try Gatekeeper.assess(candidate)
+            try Gatekeeper.assess(candidate, log: log)
         } else {
             log.info("Gatekeeper assessment is disabled by configuration")
         }
@@ -187,6 +192,10 @@ public final class AppUpdater {
         case .orderedDescending?: break
         default:
             throw BarkeepError(.notNewer, "The download contains \(app.name) \(bundle.displayVersion), which is not newer than \(app.displayVersion)")
+        }
+        // The release that was chosen, not a later one that has not cooled off yet.
+        if let limit, limit.compare(toShort: bundle.shortVersion, build: bundle.buildVersion) == .orderedAscending {
+            throw BarkeepError(.archiveError, "The download for \(app.name) \(limit.displayVersion) holds \(bundle.displayVersion), a newer release that has not finished its cooling-off period")
         }
         if let minimum = bundle.info["LSMinimumSystemVersion"] as? String,
            !UpdateFinder.systemSatisfies(minimum, systemVersion) {
@@ -202,7 +211,8 @@ public final class AppUpdater {
 
     // MARK: Apps
 
-    func installApp(_ found: URL, replacing app: InstalledApp, source: AppSourceDefinition) throws -> String {
+    func installApp(_ found: URL, replacing app: InstalledApp, source: AppSourceDefinition,
+                    notNewerThan limit: AvailableUpdate? = nil) throws -> String {
         let destination = app.url
         let parent = destination.deletingLastPathComponent()
         var parentInfo = stat()
@@ -213,7 +223,7 @@ public final class AppUpdater {
         defer { try? FileManager.default.removeItem(at: staging) }
         let staged = staging.appendingPathComponent(destination.lastPathComponent, isDirectory: true)
         try copy(found, to: staged)
-        let (bundle, _) = try verifyCandidate(staged, replacing: app, source: source)
+        let (bundle, _) = try verifyCandidate(staged, replacing: app, source: source, notNewerThan: limit)
         try setOwnership(of: staged, like: destination)
 
         let lease = try? UpdateLease.acquire(for: app, directory: leaseDirectory, privateTo: leaseReader(app))
@@ -229,7 +239,8 @@ public final class AppUpdater {
 
     // MARK: Packages
 
-    func installPackage(_ package: URL, app: InstalledApp, update: AvailableUpdate, source: AppSourceDefinition) throws -> String {
+    func installPackage(_ package: URL, app: InstalledApp, update: AvailableUpdate, source: AppSourceDefinition,
+                        pinned: Bool = false) throws -> String {
         guard config.allowPackageInstallers else {
             throw BarkeepError(.archiveError, "The update of \(app.name) is an installer package, and AllowPackageInstallers is off")
         }
@@ -245,7 +256,7 @@ public final class AppUpdater {
             throw BarkeepError(.teamMismatch, "The package for \(app.name) is signed by team \(team), not \(expected ?? "the app's team")")
         }
         guard config.isTeamAllowed(team) else { throw BarkeepError(.teamMismatch, "Team \(team) is not in AllowedTeamIdentifiers") }
-        if config.requireGatekeeperAssessment { try Gatekeeper.assess(package, type: "install") }
+        if config.requireGatekeeperAssessment { try Gatekeeper.assess(package, type: "install", log: log) }
 
         let lease = try? UpdateLease.acquire(for: app, directory: leaseDirectory, privateTo: leaseReader(app))
         defer { lease?.release(directory: leaseDirectory) }
@@ -268,6 +279,10 @@ public final class AppUpdater {
         }
         guard AppBundle.compareVersions(short: (after.shortVersion, app.shortVersion), build: (after.buildVersion, app.buildVersion)) == .orderedDescending else {
             throw BarkeepError(.notNewer, "The package for \(app.name) installed \(after.displayVersion), which is not newer than \(app.displayVersion)")
+        }
+        // A package only shows its version once it has run, so this can only be reported.
+        if pinned, update.compare(toShort: after.shortVersion, build: after.buildVersion) == .orderedAscending {
+            log.warning("The package for \(app.name) \(update.displayVersion) installed \(after.displayVersion), a newer release than the one chosen")
         }
         return after.displayVersion
     }

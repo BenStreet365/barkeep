@@ -32,12 +32,26 @@ public struct AvailableUpdate: Codable, Sendable, Equatable {
     /// Whether this is newer than what `app` has. Sparkle feeds give the build, which is what
     /// Sparkle itself compares; other feeds give the marketing version.
     public func isNewer(than app: InstalledApp) -> Bool {
-        if let build, let installed = app.buildVersion, build != version {
-            let byBuild = Version.compare(build, installed)
-            if byBuild != .orderedSame { return byBuild == .orderedDescending }
+        isNewer(thanShort: app.shortVersion, build: app.buildVersion)
+    }
+
+    public func isNewer(thanShort short: String?, build installedBuild: String?) -> Bool {
+        compare(toShort: short, build: installedBuild) == .orderedDescending
+    }
+
+    /// How this release compares with a copy of the app that has these versions.
+    public func compare(toShort short: String?, build installedBuild: String?) -> ComparisonResult {
+        if let build, let installedBuild, build != version {
+            let byBuild = Version.compare(build, installedBuild)
+            if byBuild != .orderedSame { return byBuild }
         }
-        guard let installed = app.shortVersion ?? app.buildVersion else { return true }
-        return Version.compare(version, installed) == .orderedDescending
+        guard let installed = short ?? installedBuild else { return .orderedDescending }
+        return Version.compare(version, installed)
+    }
+
+    /// Whether this and `other` are the same release.
+    public func isSameRelease(as other: AvailableUpdate) -> Bool {
+        compare(toShort: other.version, build: other.build) == .orderedSame
     }
 }
 
@@ -92,7 +106,7 @@ public enum Version {
 }
 
 /// Reads the newest version from a source.
-public struct UpdateFinder {
+public struct UpdateFinder: Sendable {
     public let config: Configuration
     public let log: Log
     /// The macOS version the update must run on.
@@ -110,9 +124,17 @@ public struct UpdateFinder {
         return try HTTPClient.get(url, maxBytes: Self.feedLimit, headers: headers, allowFile: config.allowFileURLs)
     }
 
+    /// Every release the source offers now, oldest first, so the last is the newest. Most feeds
+    /// only name their newest; a Sparkle appcast can list earlier ones too, each with its own
+    /// date, download and signature.
+    public func releases(for app: InstalledApp, source: AppSourceDefinition) throws -> [AvailableUpdate] {
+        if source.kind == .sparkle { return try sparkleReleases(app, source) }
+        return try latest(for: app, source: source).map { [$0] } ?? []
+    }
+
     public func latest(for app: InstalledApp, source: AppSourceDefinition) throws -> AvailableUpdate? {
         switch source.kind {
-        case .sparkle: try sparkle(app, source)
+        case .sparkle: try sparkleReleases(app, source).last
         case .electronBuilder: try electronBuilder(app, source)
         case .squirrel: try squirrel(app, source)
         case .gitHub: try gitHub(app, source)
@@ -124,7 +146,10 @@ public struct UpdateFinder {
 
     // MARK: Sparkle
 
-    func sparkle(_ app: InstalledApp, _ source: AppSourceDefinition) throws -> AvailableUpdate? {
+    /// How many of an appcast's releases are kept: the newest ones.
+    static let sparkleReleaseLimit = 30
+
+    func sparkleReleases(_ app: InstalledApp, _ source: AppSourceDefinition) throws -> [AvailableUpdate] {
         let (data, _) = try get(source.feedURL ?? "")
         let items = try SparkleAppcast.parse(data)
         let usable = items.filter { item in
@@ -133,14 +158,19 @@ public struct UpdateFinder {
                 && item.maximumSystemVersion.map { !Self.systemSatisfies(Self.bump($0), systemVersion) } ?? true
                 && (item.hardwareRequirements.isEmpty || item.hardwareRequirements.contains("arm64"))
         }
-        guard let best = usable.max(by: { Version.compare($0.build, $1.build) == .orderedAscending }) else { return nil }
-        var update = AvailableUpdate(version: best.shortVersion ?? best.build, build: best.build,
-                                     downloadURL: Self.resolve(best.url, against: source.feedURL), releaseDate: best.date)
-        update.size = best.length
-        update.edSignature = best.edSignature
-        update.minimumSystemVersion = best.minimumSystemVersion
-        update.releaseNotesURL = best.releaseNotesURL
-        return update
+        var seen = Set<String>()
+        return usable.sorted { Version.compare($0.build, $1.build) == .orderedAscending }
+            .filter { seen.insert($0.build).inserted }
+            .suffix(Self.sparkleReleaseLimit)
+            .map { item in
+                var update = AvailableUpdate(version: item.shortVersion ?? item.build, build: item.build,
+                                             downloadURL: Self.resolve(item.url, against: source.feedURL), releaseDate: item.date)
+                update.size = item.length
+                update.edSignature = item.edSignature
+                update.minimumSystemVersion = item.minimumSystemVersion
+                update.releaseNotesURL = item.releaseNotesURL
+                return update
+            }
     }
 
     /// An enclosure URL relative to the appcast (Tailscale's `Tailscale-1.104.2-macos.zip`), made

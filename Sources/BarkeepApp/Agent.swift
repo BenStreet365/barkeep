@@ -98,7 +98,8 @@ final class Agent: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func handleRelaunch(_ record: AppRecord) {
-        guard record.relaunchRequested == true, record.status == .updated || record.status == .upToDate,
+        // Whatever its status: an app that releases often has its next update waiting already.
+        guard record.relaunchRequested == true, record.status != .installing,
               let asked = quitByUs[record.app.path], let updated = record.lastUpdated, updated > asked else { return }
         quitByUs[record.app.path] = nil
         guard running(record).isEmpty else { return }
@@ -120,7 +121,7 @@ final class Agent: NSObject, UNUserNotificationCenterDelegate {
         guard let available = record.available, !running(record).isEmpty else { return }
         let now = Date()
         let version = available.displayVersion
-        let name = record.app.name.replacingOccurrences(of: ".app", with: "")
+        let name = record.app.displayName
         if record.status == .closingSoon, let closeAt = record.closeAt, closeAt > now {
             notifyOnce("\(record.app.path)|\(version)|closing", title: "\(name) will close at \(closeAt.formatted(date: .omitted, time: .shortened))",
                        body: "Save your work. \(name) will close to install version \(version), then open again.", path: record.app.path)

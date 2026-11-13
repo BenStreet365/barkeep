@@ -167,8 +167,9 @@
 
 			<!-- ===== Protection ===== -->
 
-			<!-- Require Gatekeeper to accept each update as notarised (Developer ID, Apple or Mac
-			     App Store). Also refuses updates while Gatekeeper is turned off on the Mac. -->
+			<!-- Require each update to be notarised (Developer ID, Apple or Mac App Store).
+			     Gatekeeper is asked; where Gatekeeper is turned off on the Mac, barkeep checks
+			     the notarisation itself. -->
 			<key>RequireGatekeeperAssessment</key>
 			<true/>
 			<!-- Allow updates delivered as installer packages (Zoom, for example). The package

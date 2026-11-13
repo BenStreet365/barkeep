@@ -24,15 +24,23 @@ public final class HTTPClient: NSObject, URLSessionDataDelegate, URLSessionDownl
     private let lock = NSLock()
     private var transfers: [Int: Transfer] = [:]
 
-    private lazy var session: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 60
-        configuration.timeoutIntervalForResource = 3600
-        configuration.httpCookieStorage = nil
-        configuration.urlCache = nil
-        configuration.httpAdditionalHeaders = ["User-Agent": Self.userAgent]
-        return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-    }()
+    private var cachedSession: URLSession?
+
+    /// Made on first use, under the lock: feeds are fetched from several threads at once.
+    private var session: URLSession {
+        lock.withLock {
+            if let cachedSession { return cachedSession }
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.timeoutIntervalForRequest = 60
+            configuration.timeoutIntervalForResource = 3600
+            configuration.httpCookieStorage = nil
+            configuration.urlCache = nil
+            configuration.httpAdditionalHeaders = ["User-Agent": Self.userAgent]
+            let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+            cachedSession = session
+            return session
+        }
+    }
 
     /// GETs `url` into memory. `allowFile` accepts `file://` URLs (testing only).
     public static func get(_ url: URL, maxBytes: Int = 8 * 1024 * 1024, headers: [String: String] = [:],
@@ -45,7 +53,7 @@ public final class HTTPClient: NSObject, URLSessionDataDelegate, URLSessionDownl
         }
         var request = URLRequest(url: url)
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
-        let transfer = try shared.run(request, maxBytes: Int64(maxBytes), destination: nil)
+        let transfer = try shared.run(request, maxBytes: Int64(maxBytes), destination: nil, retries: 1)
         guard let response = transfer.response, statuses.contains(response.statusCode) else {
             throw BarkeepError(.feedError, "Cannot download \(url.absoluteString): HTTP \(transfer.response?.statusCode ?? 0)")
         }
@@ -67,18 +75,31 @@ public final class HTTPClient: NSObject, URLSessionDataDelegate, URLSessionDownl
         }
     }
 
-    private func run(_ request: URLRequest, maxBytes: Int64, destination: URL?) throws -> Transfer {
+    /// Network trouble that often clears by itself: worth one more try for something as small as a feed.
+    static let transientErrors: Set<URLError.Code> = [
+        .timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet,
+    ]
+
+    private func run(_ request: URLRequest, maxBytes: Int64, destination: URL?, retries: Int = 0) throws -> Transfer {
         let url = request.url?.absoluteString ?? "?"
         guard request.url?.scheme == "https" else { throw BarkeepError(.feedError, "Refusing to download \(url) without HTTPS") }
-        let transfer = Transfer(maxBytes: maxBytes, destination: destination)
-        let task: URLSessionTask = destination == nil ? session.dataTask(with: request) : session.downloadTask(with: request)
-        lock.withLock { transfers[task.taskIdentifier] = transfer }
-        task.resume()
-        transfer.done.wait()
-        lock.withLock { transfers[task.taskIdentifier] = nil }
-        if transfer.tooLarge { throw BarkeepError(.feedError, "\(url) is larger than \(maxBytes) bytes") }
-        if let error = transfer.error { throw BarkeepError(.feedError, "Cannot download \(url): \(error.localizedDescription)") }
-        return transfer
+        var attemptsLeft = retries
+        while true {
+            let transfer = Transfer(maxBytes: maxBytes, destination: destination)
+            let task: URLSessionTask = destination == nil ? session.dataTask(with: request) : session.downloadTask(with: request)
+            lock.withLock { transfers[task.taskIdentifier] = transfer }
+            task.resume()
+            transfer.done.wait()
+            lock.withLock { transfers[task.taskIdentifier] = nil }
+            if transfer.tooLarge { throw BarkeepError(.feedError, "\(url) is larger than \(maxBytes) bytes") }
+            guard let error = transfer.error else { return transfer }
+            if attemptsLeft > 0, let code = (error as? URLError)?.code, Self.transientErrors.contains(code) {
+                attemptsLeft -= 1
+                Thread.sleep(forTimeInterval: 2)
+                continue
+            }
+            throw BarkeepError(.feedError, "Cannot download \(url): \(error.localizedDescription)")
+        }
     }
 
     private func transfer(_ task: URLSessionTask) -> Transfer? { lock.withLock { transfers[task.taskIdentifier] } }

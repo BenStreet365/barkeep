@@ -461,7 +461,7 @@ public final class SelfUpdater {
     }
 
     /// The package must be signed with a Developer ID Installer certificate from the same team as
-    /// the running binary, and Gatekeeper must accept it as notarised.
+    /// the running binary, and be notarised.
     func verifyPackage(_ package: URL, teamID: String) throws {
         let signature = try Command.run("/usr/sbin/pkgutil", ["--check-signature", package.path], timeout: 120)
         guard signature.status == 0, let packageTeam = Gatekeeper.installerTeamID(fromCheckSignature: signature.stdoutString) else {
@@ -470,14 +470,8 @@ public final class SelfUpdater {
         guard packageTeam == teamID else {
             throw BarkeepError(.teamMismatch, "\(package.lastPathComponent) is signed by team \(packageTeam), not \(teamID)")
         }
-        let assessment = try Command.run("/usr/sbin/spctl", ["--assess", "--type", "install", "-vv", package.path], timeout: 120)
-        let detail = (assessment.stderrString + assessment.stdoutString).trimmingCharacters(in: .whitespacesAndNewlines)
-        if detail.contains("override=") {
-            throw BarkeepError(.gatekeeperRejected, "Gatekeeper did not assess \(package.lastPathComponent), so its notarisation cannot be checked: \(detail)")
-        }
-        if let reason = Gatekeeper.rejection(status: assessment.status, output: detail) {
-            throw BarkeepError(.gatekeeperRejected, "Gatekeeper rejected \(package.lastPathComponent): \(reason)")
-        }
+        // Notarised: Gatekeeper says so, or where it is turned off, barkeep checks for itself.
+        try Gatekeeper.assess(package, type: "install", log: log)
         log.info("Verified \(package.lastPathComponent): signed by team \(packageTeam) and notarised")
     }
 

@@ -9,11 +9,11 @@ has the security model and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) covers bui
 - `Sources/BarkeepCore/`: everything that decides or does anything.
   - `AppScanner`, `InstalledApp`: finding apps and reading their update metadata.
   - `UpdateSource` (detection), `Providers` (reading feeds), `SparkleAppcast`, `BuiltInCatalog`.
-  - `Policy`: cooling-off and deadlines, a pure function.
+  - `Policy`: cooling-off, deadlines and which remembered release to install, pure functions.
   - `AppUpdater`, `Archive`, `Verification`, `UpdateLease`: download, verify, swap.
   - `Barkeeper`: one pass over the apps; `Daemon`: the LaunchDaemon and its XPC service.
   - `SelfUpdater`: barkeep's own updates (from decant).
-  - `Configuration`, `State`, `ExitStatus`.
+  - `Configuration`, `State`, `StateSeal` (the daemon only acts on a state it sealed), `ExitStatus`.
 - `Sources/barkeep/main.swift`: the command line.
 - `Sources/BarkeepApp/`: Barkeep.app (AppKit lifecycle, SwiftUI views). The SwiftPM product is
   `BarkeepApp`, since `Barkeep` would clash with `barkeep` on a case-insensitive disk. It has no

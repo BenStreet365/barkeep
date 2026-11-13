@@ -21,6 +21,35 @@ public struct PolicyDecision: Equatable, Sendable {
     public var closeAt: Date?
 }
 
+/// Chooses which of the releases barkeep has seen to work on. An app that releases more often
+/// than the cooling-off period lasts always has a newest release that is too fresh, so waiting for
+/// "the newest" would wait for ever. Instead barkeep installs the newest release that *has* cooled
+/// off, and moves on to the next when that one has.
+public enum ReleaseSelection {
+    /// The newest release whose cooling-off period is over, or if none is, the one that will be
+    /// ready first. Releases barkeep has set aside are passed over. `releases` is oldest first.
+    public static func select(from releases: [KnownRelease], coolingOffHours: Int, now: Date) -> KnownRelease? {
+        let usable = releases.filter { $0.setAside == nil }
+        if let ready = usable.last(where: { $0.installableAfter(coolingOffHours: coolingOffHours, now: now) <= now }) { return ready }
+        // `min` keeps the first of equals; reversed, that is the newest.
+        return usable.reversed().min {
+            $0.installableAfter(coolingOffHours: coolingOffHours, now: now) < $1.installableAfter(coolingOffHours: coolingOffHours, now: now)
+        }
+    }
+
+    /// Releases worth keeping: every one still cooling off, and the newest few that have (the
+    /// one to install, and others to fall back on if its download has gone). Thinned from the
+    /// middle if there are still too many, so the oldest and newest always stay.
+    public static func prune(_ releases: [KnownRelease], coolingOffHours: Int, now: Date, keepReady: Int = 3, limit: Int = 60) -> [KnownRelease] {
+        let ready = releases.filter { $0.installableAfter(coolingOffHours: coolingOffHours, now: now) <= now }
+        var cooling = releases.filter { $0.installableAfter(coolingOffHours: coolingOffHours, now: now) > now }
+        while cooling.count > max(limit, 2) {
+            cooling = cooling.enumerated().filter { $0.offset == 0 || $0.offset == cooling.count - 1 || $0.offset % 2 == 0 }.map(\.element)
+        }
+        return ready.suffix(keepReady) + cooling
+    }
+}
+
 /// Decides when an update is installed. Updates are only ever installed while the app is closed,
 /// once they have been out for the cooling-off period. If the app stays open past the deadline,
 /// the user is told it will close after the grace period, and then it is asked to quit.

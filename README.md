@@ -121,8 +121,9 @@ untrusted until it proves it is the next version of the app that's installed:
 6. **Same app.** It must satisfy the installed copy's *designated requirement*: the rule in the
    installed signature that says what counts as the same app, which macOS uses for Keychain and
    privacy permissions too.
-7. **Notarised.** Gatekeeper must accept it as notarised, and an assessment Gatekeeper didn't
-   actually perform (because it's switched off) doesn't count.
+7. **Notarised.** Gatekeeper must accept it as notarised. On a Mac where Gatekeeper is turned
+   off, Gatekeeper accepts everything without looking, which proves nothing, so barkeep checks the
+   notarisation itself instead. Either way an update Apple hasn't notarised is refused.
 8. **Newer, and runnable.** A higher version, never a downgrade, for this Mac's macOS, and built
    for Apple silicon if the installed copy is.
 9. **Installer packages** must be signed by the app's own team with a Developer ID Installer
@@ -150,8 +151,23 @@ it from a source with an `ExpectedTeamIdentifier` (the catalog has one for each 
 The deadline clock starts when the vendor released the first update the app is still missing,
 or when barkeep first saw it if that was earlier or the feed has no date. With `DeadlineBasis`
 Discovered it starts when barkeep first found the app out of date. Either way, a newer release
-that arrives while one is waiting doesn't restart it, so an app that releases every week still
-gets updated. The deadline is never before the cooling-off period ends. Users are told `NotifyBeforeDeadlineHours` before a deadline if the app is open, and
+that arrives while one is waiting doesn't restart it. The deadline is never before the
+cooling-off period ends.
+
+**Apps that release often.** Some apps release every week, or every day, so their newest release
+is never old enough to install. barkeep doesn't wait for the newest: it remembers each release it
+sees (version, download, checksum or signature, release date and when it first saw it) and
+installs the newest one that *has* cooled off, then the next when that one has. With the default
+7 days, an app that releases daily is kept 7 days behind its newest release, and never further.
+A Sparkle feed lists its earlier releases, so barkeep knows them from the first check; other
+feeds only name their newest, so barkeep learns each release as it appears. If an older release
+can no longer be downloaded, or its address now serves a newer one, barkeep sets it aside and
+installs the next when it has cooled off. A release the vendor withdraws (the feed goes back to
+an earlier version) is forgotten. `barkeep status` and Barkeep.app show which release is next.
+What barkeep remembers is sealed, so it can't be edited to bring an update forward
+([Security](docs/SECURITY.md#what-barkeep-remembers)).
+
+Users are told `NotifyBeforeDeadlineHours` before a deadline if the app is open, and
 whenever an app will close. That's all: nobody gets a notification for an update that installs
 on its own.
 
@@ -206,7 +222,7 @@ profile. `barkeep show-config` lists where each value came from.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `RequireGatekeeperAssessment` | boolean | true | Gatekeeper must accept updates as notarised. |
+| `RequireGatekeeperAssessment` | boolean | true | Updates must be notarised by Apple. Gatekeeper is asked; on a Mac where Gatekeeper is turned off, barkeep checks the notarisation itself. Off: updates that aren't notarised are installed (they must still be signed by the app's developer). |
 | `AllowPackageInstallers` | boolean | true | Accept updates delivered as `.pkg` (signed by the app's own team). |
 | `MaximumDownloadSizeMB` | integer | 2048 | Largest download. |
 | `AllowUnverifiedSignatures` | boolean | false | **Testing only.** Accept signatures Apple didn't issue (ad hoc, self-signed). The designated requirement and bundle ID must still match. |
@@ -318,7 +334,8 @@ Barkeep.app is started in every user's session at login by a LaunchAgent, unless
 (or, when the profile leaves it out, the user's own setting) is off. It:
 
 - shows a menu bar icon (unless `ShowInMenuBar` is off), with a dot when updates are waiting and an
-  orange dot when an app is about to close;
+  orange dot when an app is about to close. A click shows what's waiting; a right click (or
+  Control-click) gives Check for Updates, Open Barkeep, Settings, About Barkeep and Quit;
 - opens a window listing the apps, how each updates, where its update stands, and why (a
   standard user sees the apps outside home folders and those in their own; administrators see
   every user's). Its Filter menu hides apps by status and shows or hides columns; by default it
@@ -333,7 +350,13 @@ Barkeep.app is started in every user's session at login by a LaunchAgent, unless
 It never installs anything itself and has no privileges: it reads the daemon's state from
 `/Library/Application Support/uk.street365.barkeep/State.json` (administrators) or the user's own
 copy of it in `Users/<uid>.json` beside it, and sends requests to the daemon.
-A user who quits it gets it back at their next login.
+**Barkeep stays running.** Quit (Command-Q, or Quit in the Dock) closes Barkeep's windows and
+leaves it in the menu bar, with the launch guard and notifications still working. Only Quit in
+the menu bar icon's right-click menu stops Barkeep.app, and it's back at the user's next login.
+Logging out, restarting and shutting down are never held up. If Barkeep.app crashes, launchd
+starts it again. None of this touches the daemon, which keeps updating apps whether Barkeep.app
+is running or not: launchd keeps it running, and if a pass ever gets stuck for three hours the
+daemon restarts itself rather than sit there doing nothing.
 
 ## The barkeep command
 
@@ -418,7 +441,9 @@ on their own. Turn `AutomaticSelfUpdates` off to ship barkeep through your MDM i
 - **Quitting is polite by default.** An app with unsaved work will ask the user, and barkeep waits.
   Only `ForceQuitAtDeadline` changes that.
 - **Feeds are checked from each Mac.** Every Mac asks each vendor directly, every
-  `CheckIntervalMinutes`. GitHub's API allows 60 unauthenticated requests an hour per address,
+  `CheckIntervalMinutes`, several feeds at a time. A feed that can't be read is asked again after
+  15 minutes, then 30, and so on up to `CheckIntervalMinutes`; an update barkeep already knows
+  about still installs in the meantime. GitHub's API allows 60 unauthenticated requests an hour per address,
   which a large office behind one address can reach; GitHub-based sources are then retried later.
 
 ## Removing barkeep

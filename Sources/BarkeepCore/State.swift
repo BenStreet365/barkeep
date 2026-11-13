@@ -24,6 +24,35 @@ public enum AppStatus: String, Codable, Sendable, CaseIterable {
     case failed
 }
 
+/// One release barkeep has seen offered for an app and not yet installed. An app that releases
+/// often (every day, say) always has a newest release too fresh to install, so barkeep remembers
+/// each one, with what it needs to download and check it later: once a release has cooled off it
+/// can be installed even though newer ones have appeared since.
+public struct KnownRelease: Codable, Sendable, Equatable {
+    public var update: AvailableUpdate
+    /// When barkeep first saw this release offered.
+    public var seen: Date
+    /// Failed attempts at installing it; later attempts back off.
+    public var failures = 0
+    public var lastFailure: String?
+    public var lastAttempt: Date?
+    /// Why barkeep gave up on this release (its download is gone, or no longer what the feed
+    /// described). A newer one is installed instead when it has cooled off.
+    public var setAside: String?
+
+    public init(update: AvailableUpdate, seen: Date) {
+        self.update = update
+        self.seen = seen
+    }
+
+    /// When this release's cooling-off period ends. A release cannot have come out after barkeep
+    /// first saw it, so a release date in the future counts from then.
+    public func installableAfter(coolingOffHours: Int, now: Date) -> Date {
+        let seen = min(seen, now)
+        return min(update.releaseDate ?? seen, seen).addingTimeInterval(TimeInterval(coolingOffHours) * 3600)
+    }
+}
+
 /// Everything barkeep knows about one installed app. Written by the daemon, read by Barkeep.app.
 public struct AppRecord: Codable, Sendable, Equatable, Identifiable {
     public var id: String { app.path }
@@ -32,6 +61,13 @@ public struct AppRecord: Codable, Sendable, Equatable, Identifiable {
     public var status: AppStatus
     public var message: String
     public var available: AvailableUpdate?
+    /// The releases newer than the installed copy that barkeep has seen, oldest first; `available`
+    /// is the newest. Optional so a state file from an older barkeep still loads.
+    public var releases: [KnownRelease]?
+    /// The release barkeep is working on: the newest that has cooled off, or the next to.
+    public var selected: AvailableUpdate?
+    /// Feed checks that failed in a row; the next ones come sooner than `CheckIntervalMinutes`.
+    public var feedFailures: Int?
     /// When barkeep first found this app out of date. Newer releases found while an update is
     /// waiting do not restart the clock, so frequent releases cannot put a deadline off for ever.
     public var firstSeen: Date?
@@ -94,6 +130,9 @@ public struct State: Codable, Sendable, Equatable {
     public var allowUserInitiatedUpdates = true
     public var showInMenuBar: Bool?
     public var openAtLogin: Bool?
+    /// Whether Gatekeeper is on, for Barkeep.app's Settings window. With it off, barkeep checks
+    /// notarisation itself.
+    public var gatekeeper: Gatekeeper.Mode?
 
     public init() {}
 
@@ -102,11 +141,29 @@ public struct State: Codable, Sendable, Equatable {
     /// The saved state, or nil if there is none or it cannot be trusted (not a regular file owned
     /// by root and writable only by root).
     public static func load(from path: String = State.path, requireRootOwnership: Bool = true) -> State? {
+        guard let data = contents(of: path, requireRootOwnership: requireRootOwnership) else { return nil }
+        return try? decoder.decode(State.self, from: data)
+    }
+
+    /// The bytes of a state file, if it is a regular file that only root can have written.
+    static func contents(of path: String, requireRootOwnership: Bool) -> Data? {
         var st = stat()
         guard lstat(path, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG else { return nil }
         if requireRootOwnership, st.st_uid != 0 || st.st_mode & (S_IWGRP | S_IWOTH) != 0 { return nil }
-        guard let data = FileManager.default.contents(atPath: path) else { return nil }
-        return try? decoder.decode(State.self, from: data)
+        return FileManager.default.contents(atPath: path)
+    }
+
+    /// The saved state for the daemon, which acts on it: as `load`, and it must also carry
+    /// barkeep's seal (see `StateSeal`). A state that fails the check is not used, and `problem`
+    /// says why. A state saved before barkeep sealed anything is accepted once.
+    public static func loadSealed(from path: String = State.path, seal: StateSeal, requireRootOwnership: Bool = true) -> (state: State?, problem: String?) {
+        guard let data = contents(of: path, requireRootOwnership: requireRootOwnership) else { return (nil, nil) }
+        switch seal.verify(data) {
+        case .valid, .neverSealed: break
+        case .invalid(let why): return (nil, why)
+        }
+        guard let state = try? decoder.decode(State.self, from: data) else { return (nil, "it cannot be read") }
+        return (state, nil)
     }
 
     /// What the current user may see: the whole state for root and administrators, otherwise
@@ -117,12 +174,16 @@ public struct State: Codable, Sendable, Equatable {
 
     /// Saves the state, readable by its owner and `group` (`admin`, for the daemon). Written to a
     /// new file and renamed over the old one, never through a symlink.
-    public mutating func save(to path: String = State.path, group: gid_t? = nil) throws {
+    public mutating func save(to path: String = State.path, group: gid_t? = nil, seal: StateSeal? = nil) throws {
         generation += 1
         let directory = (path as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o755])
-        try ProtectedFile.write(Self.encoder.encode(self), to: path, mode: 0o640, group: group)
+        let data = try Self.encoder.encode(self)
+        // The seal first: it vouches for the file being replaced as well, so a crash between the
+        // two writes leaves a state that still passes.
+        try seal?.seal(data, replacing: FileManager.default.contents(atPath: path))
+        try ProtectedFile.write(data, to: path, mode: 0o640, group: group)
     }
 
     /// Writes each account's view of the state, readable only by root and that account, and

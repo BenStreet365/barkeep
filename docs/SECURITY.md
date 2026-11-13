@@ -28,8 +28,12 @@ they like. To be installed it must:
 4. be validly signed (strict, all architectures, nested code), not ad hoc, by a certificate Apple
    issued, with the installed copy's Team ID and any expected or allowed Team IDs;
 5. satisfy the installed copy's designated requirement;
-6. be accepted by Gatekeeper as notarised (an assessment Gatekeeper skipped because it is turned
-   off is refused, as is a local `spctl --add` rule);
+6. be notarised by Apple. Gatekeeper is asked, and a local `spctl --add` rule doesn't count. If
+   Gatekeeper is turned off on the Mac it accepts everything without looking
+   (`override=security disabled`), so barkeep doesn't take its word: it checks the notarisation
+   itself, with the code requirement `notarized` on a Developer ID signature (or an Apple or Mac
+   App Store signature), and for a package with `pkgutil --check-signature`. The requirement is
+   the same whichever way it is checked;
 7. be newer than the installed copy, so a genuinely signed old version with known bugs can't be
    used to roll a Mac back.
 
@@ -86,6 +90,28 @@ folder is theirs; administrators and root see everything.
 
 Barkeep.app ignores state and leases unless they are root-owned and writable only by root. They
 contain app names, versions, paths and update sources, nothing secret.
+
+## What barkeep remembers
+
+An app that releases often is updated to the newest release that has cooled off, so barkeep has
+to remember releases: each one's version, download address, checksum or signature, release date,
+and when barkeep first saw it. Those dates decide when an update installs, so they are protected:
+
+- They are in `State.json`, which only root can write. The daemon never reads the copies it
+  makes for users, and Barkeep.app only displays the state.
+- Every state the daemon saves is sealed: an HMAC-SHA256 of the file, in `State.seal`, under a
+  random key in `Seal.key` (both mode 600, root). The daemon only acts on a state that matches
+  its seal. One that doesn't (edited by hand, restored from somewhere else, damaged) is thrown
+  away with a warning in the log, and barkeep starts again from what the feeds say now. That
+  can only make an update wait longer, never install sooner.
+- A remembered release is only a place to look. The download still has to pass every check
+  above, and must hold the release that was chosen: if its address now serves a newer release
+  that hasn't cooled off, it is refused.
+- A feed can't use this to go backwards: only releases newer than the installed copy are kept,
+  and one the feed has withdrawn is dropped.
+
+The seal protects against everyone but root. Root can read the key, as it can replace barkeep
+itself.
 
 ## Changing settings on the Mac
 

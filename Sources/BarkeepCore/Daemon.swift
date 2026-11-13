@@ -77,6 +77,13 @@ public final class Daemon: @unchecked Sendable {
     static let selfUpdateInterval: TimeInterval = 3600
     /// How long Update Now waits for an open app to quit (in 2-second steps).
     static let quitWaitSteps = 45
+    /// A pass that makes no progress for this long is stuck (a download, copy and installer at
+    /// their own time limits come to well under it). The daemon then exits, and launchd starts
+    /// a fresh one: better than a daemon that is running but will never update anything again.
+    static let stallLimit: TimeInterval = 3 * 3600
+    /// Check for Updates asked again this soon after the last full check gets that check's answer.
+    static let checkNowInterval: TimeInterval = 30
+    static let gatekeeperCheckInterval: TimeInterval = 10 * 60
 
     let makeConfiguration: @Sendable () -> Configuration
     let log: Log
@@ -86,6 +93,10 @@ public final class Daemon: @unchecked Sendable {
     /// Settings changes one at a time, so two can't overwrite each other.
     let settings = DispatchQueue(label: "\(Configuration.domain).settings")
     private var lastSelfUpdate: Date?
+    /// When the pass under way last got somewhere; nil between passes.
+    private let progress = Locked<Date?>(nil)
+    private let lastFullCheck = Locked<Date?>(nil)
+    private let gatekeeper = Locked<(mode: Gatekeeper.Mode, at: Date)?>(nil)
     private let startedFrom: FileIdentity?
 
     public init(log: Log, helperExecutable: String?, version: String, makeConfiguration: @escaping @Sendable () -> Configuration) {
@@ -106,12 +117,55 @@ public final class Daemon: @unchecked Sendable {
 
     func makeBarkeeper() -> (Barkeeper, Configuration) {
         let config = makeConfiguration()
-        return (Barkeeper(config: config, log: log, helperExecutable: helperExecutable), config)
+        let barkeeper = Barkeeper(config: config, log: log, helperExecutable: helperExecutable)
+        barkeeper.gatekeeperMode = gatekeeperMode()
+        barkeeper.onProgress = { [progress] in progress.withValue { $0 = Date() } }
+        barkeeper.onSave = { [progress] _ in progress.withValue { $0 = Date() } }
+        return (barkeeper, config)
+    }
+
+    /// The Mac's Gatekeeper setting, looked up every ten minutes rather than every pass.
+    func gatekeeperMode() -> Gatekeeper.Mode {
+        gatekeeper.withValue { cached in
+            if let cached, Date().timeIntervalSince(cached.at) < Self.gatekeeperCheckInterval { return cached.mode }
+            let mode = Gatekeeper.mode()
+            if let cached, cached.mode != mode { log.info("Gatekeeper is now \(mode.rawValue) on this Mac") }
+            cached = (mode, Date())
+            return mode
+        }
+    }
+
+    /// Runs `body` as work the watchdog keeps an eye on.
+    func watched<T>(_ body: () -> T) -> T {
+        progress.withValue { $0 = Date() }
+        defer { progress.withValue { $0 = nil } }
+        return body()
+    }
+
+    /// Exits if a pass has been stuck for `stallLimit`, on a thread of its own so that nothing
+    /// the pass is blocked on can block it too. launchd starts the daemon again (KeepAlive), and
+    /// a lease or lock the stuck pass held ends with the process.
+    func startWatchdog() {
+        let progress = self.progress, log = self.log
+        let thread = Thread {
+            while true {
+                Thread.sleep(forTimeInterval: 60)
+                guard let last = progress.withValue({ $0 }), Date().timeIntervalSince(last) > Self.stallLimit else { continue }
+                log.error("A pass has made no progress for \(Int(Self.stallLimit / 3600)) hours; restarting the daemon")
+                exit(1)
+            }
+        }
+        thread.name = "\(Configuration.domain).watchdog"
+        thread.start()
     }
 
     /// One pass. Runs on `work`, so passes never overlap.
     @discardableResult
     func tick(checkFeeds: Bool = false, requested: Set<String> = [], forceRescan: Bool = false) -> State {
+        watched { pass(checkFeeds: checkFeeds, requested: requested, forceRescan: forceRescan) }
+    }
+
+    private func pass(checkFeeds: Bool, requested: Set<String>, forceRescan: Bool) -> State {
         let (barkeeper, _) = makeBarkeeper()
         _ = UpdateLease.live(cleanUp: true)
         let state = barkeeper.loadState()
@@ -128,7 +182,9 @@ public final class Daemon: @unchecked Sendable {
             return state
         }
         defer { lock.release() }
-        return barkeeper.cycle(options)
+        let result = barkeeper.cycle(options)
+        if checkFeeds { lastFullCheck.withValue { $0 = Date() } }
+        return result
     }
 
     func selfUpdateIfDue() {
@@ -136,7 +192,7 @@ public final class Daemon: @unchecked Sendable {
         lastSelfUpdate = Date()
         let updater = SelfUpdater(config: makeConfiguration(), log: log, currentVersion: version)
         updater.executablePath = helperExecutable
-        let report = updater.run(checkOnly: false, mode: .automatic)
+        let report = watched { updater.run(checkOnly: false, mode: .automatic) }
         if report.action == .updated {
             // launchd starts the new binary (KeepAlive).
             log.info("Restarting into barkeep \(report.availableVersion ?? "")")
@@ -154,7 +210,9 @@ public final class Daemon: @unchecked Sendable {
         case .checkNow:
             guard config.allowUserInitiatedUpdates else { return DaemonReply(ok: false, message: "Your administrator has turned off checking for updates from Barkeep") }
             log.info("A user (uid \(uid)) asked barkeep to check for updates")
-            let state = work.sync { tick(checkFeeds: true) }
+            // Someone leaning on the button gets the answer of the check just made.
+            let recent = lastFullCheck.withValue { $0.map { Date().timeIntervalSince($0) < Self.checkNowInterval } ?? false }
+            let state = work.sync { tick(checkFeeds: !recent) }
             let visibility = Visibility.local()
             let waiting = state.apps.filter { $0.available != nil && visibility.isVisible($0.app.path, to: uid) }.count
             return DaemonReply(ok: true, message: waiting == 0 ? "All apps are up to date" : "\(waiting) update\(waiting == 1 ? "" : "s") found")
@@ -223,12 +281,14 @@ public final class Daemon: @unchecked Sendable {
         }
         xpc_connection_activate(listener)
         log.info("barkeep \(version) daemon started")
+        startWatchdog()
         do { try SettingsAuthorization.register() } catch { log.warning("\(error)") }
         // Saved again at once, so an older version's State.json (readable by everyone) is
         // replaced and each user's view written, without waiting for something to change.
         work.async { [self] in
             let (barkeeper, _) = makeBarkeeper()
             var state = barkeeper.loadState()
+            state.gatekeeper = barkeeper.gatekeeperMode
             barkeeper.save(&state)
         }
         let timer = DispatchSource.makeTimerSource(queue: work)

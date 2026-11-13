@@ -26,9 +26,10 @@ USAGE:
   The daemon (uk.street365.barkeep.daemon) runs as root. Updates install while apps are
   closed, once they are CoolingOffHours old. An app still open DeadlineDays after its update
   was released (or found, with DeadlineBasis Discovered) is asked to quit, after a warning, DeadlineGraceMinutes beforehand.
+  An app that releases more often than that gets the newest release that has cooled off.
   Every update must be signed by the same developer as the installed copy and satisfy its
-  designated requirement, match any checksum or EdDSA signature in its feed, pass Gatekeeper
-  and be newer.
+  designated requirement, match any checksum or EdDSA signature in its feed, be notarised
+  (Gatekeeper is asked; where it is turned off barkeep checks for itself) and be newer.
 
   Configuration is read from managed preferences (PayloadType \(Configuration.domain)).
   Root may also pass --config <file.plist> for testing.
@@ -140,7 +141,11 @@ func printRecords(_ records: [AppRecord]) {
         print("\(record.app.name) \(record.app.displayVersion)\(available) [\(record.status.rawValue)] \(record.message.escapingControlCharacters)")
         print("    \(record.app.path)  \(record.app.bundleIdentifier)  source: \(describe(record.source))")
         if record.available != nil {
-            print("    released \(format(record.available?.releaseDate)), installable after \(format(record.installableAfter)), deadline \(format(record.deadline))")
+            let next = record.selected ?? record.available
+            if let next, let newest = record.available, !next.isSameRelease(as: newest) {
+                print("    installing \(next.displayVersion) next: the newest release that has cooled off (\(record.releases?.count ?? 1) known)")
+            }
+            print("    released \(format(next?.releaseDate)), installable after \(format(record.installableAfter)), deadline \(format(record.deadline))")
         }
     }
 }
@@ -277,6 +282,7 @@ func run() -> Int32 {
                 log.attachFile(at: config.effectiveLogFilePath())
             }
             let barkeeper = Barkeeper(config: config, log: log, helperExecutable: helper)
+            if command == "run" { barkeeper.gatekeeperMode = Gatekeeper.mode() }
             var options = CycleOptions()
             options.install = command == "run"
             options.checkFeeds = command == "check" || args.checkFeeds

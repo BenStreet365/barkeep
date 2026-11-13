@@ -26,7 +26,6 @@ final class BarModel {
 
     init() {
         reload()
-        watch()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
             MainActor.assumeIsolated { (NSApp.delegate as? AppDelegate)?.model.reload() }
         }
@@ -53,6 +52,8 @@ final class BarModel {
            Bundle.main.executablePath.flatMap(FileIdentity.init(path:)) != startedFrom {
             exit(1)
         }
+        // The daemon's folder may not have existed when Barkeep started (a first install).
+        if watcher == nil { watch() }
         let (config, warnings) = ConfigurationLoader().load()
         configuration = config
         configurationWarnings = warnings

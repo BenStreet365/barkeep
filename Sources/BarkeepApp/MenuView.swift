@@ -54,7 +54,7 @@ struct WaitingRow: View {
         HStack(spacing: 8) {
             AppIcon(path: record.app.path, size: 22)
             VStack(alignment: .leading, spacing: 1) {
-                Text(record.app.name.replacingOccurrences(of: ".app", with: "")).lineLimit(1)
+                Text(record.app.displayName).lineLimit(1)
                 Text(detail).font(.caption).foregroundStyle(record.status == .closingSoon ? .orange : .secondary).lineLimit(2)
             }
             Spacer()
@@ -67,7 +67,8 @@ struct WaitingRow: View {
     }
 
     var detail: String {
-        let version = "\(record.app.displayVersion) → \(record.available?.displayVersion ?? "?")"
+        // The release that will be installed: for an app that releases often, not always the newest.
+        let version = "\(record.app.displayVersion) → \((record.selected ?? record.available)?.displayVersion ?? "?")"
         switch record.status {
         case .coolingOff: return "\(version) · after \(record.installableAfter.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "")"
         case .closingSoon: return "\(version) · closes \(record.closeAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "soon")"
