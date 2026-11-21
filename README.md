@@ -68,7 +68,7 @@ this order:
 | **Mac App Store** | `Contents/_MASReceipt` | The App Store's version, for reporting. The App Store (or your MDM's VPP) installs it. |
 | **barkeep's catalog** | Bundle ID | Built-in sources for Chrome, Firefox, Zoom, Slack, Discord, Docker Desktop, VS Code, ChatGPT, Claude, Tailscale, Obsidian, UTM, balenaEtcher, Thonny, Bambu Studio, Raspberry Pi Imager, Mullvad Browser and Decant, each pinned to the vendor's Team ID. |
 | **Sparkle** | `SUFeedURL` in Info.plist | The appcast, with the EdDSA signature the app's `SUPublicEDKey` expects. Skips beta channels, informational items, deltas and items for newer macOS. |
-| **Squirrel (VS Code style)** | `updateUrl` in `Resources/app/product.json` | `<updateUrl>/api/update/darwin-arm64/<quality>/latest`, with its SHA-256. Covers VS Code and its relatives. |
+| **Squirrel (VS Code style)** | `updateUrl` in `Resources/app/product.json` | `<updateUrl>/api/update/darwin-arm64/<quality>/latest`, with its SHA-256. VS Code forks without that API (Kiro) publish a static file instead, `<updateUrl>/<quality>/metadata-darwin-arm64-<quality>.json`, which barkeep reads when the API isn't there. That file has no checksum, so those updates rely on the signature and notarisation checks in "How barkeep stops fake updates". |
 | **electron-builder** | `Resources/app-update.yml` | `latest-mac.yml` from GitHub, a generic URL or S3, with its SHA-512 and release date. |
 | **The vendor's updater** | Bundle ID | Microsoft AutoUpdate and Adobe Creative Cloud apps are reported, not updated: their updaters are made for this and fighting them helps nobody. Exclude them, or replace with an `AppSources` entry. |
 | **Apple** | `com.apple.*` | Left to Software Update and the App Store. |
@@ -92,7 +92,7 @@ Each entry needs `BundleIdentifier` and `Type`, and should have `ExpectedTeamIde
 |---|---|---|
 | `Sparkle` | `FeedURL` | An appcast URL. |
 | `ElectronBuilder` | `FeedURL` or `Repository` | The folder holding `latest-mac.yml`, or a GitHub `owner/repo`. `Channel` picks `<channel>-mac.yml`. |
-| `Squirrel` | `FeedURL` | The update server; `Channel` is the quality (default `stable`). |
+| `Squirrel` | `FeedURL` | The update server; `Channel` is the quality (default `stable`). A `FeedURL` ending in `.json` is read as a static Squirrel.Mac file (`currentRelease` and `releases`), for VS Code forks that keep theirs somewhere else. |
 | `GitHub` | `Repository` | The newest non-prerelease release. `AssetPattern` (a regular expression) picks the file; otherwise barkeep prefers arm64, then universal, Mac `.dmg`/`.zip`/`.pkg` files. GitHub's published asset digest is checked. |
 | `JSON` | `FeedURL`, `DownloadURL` or `DownloadPath`, and `VersionPath` or `VersionPattern` | Any URL that says what's newest. `VersionPath` is a dot path into JSON (`releases.0.version`); `VersionPattern` a regular expression whose first group is the version, for HTML or XML. `ReleaseDatePath` is optional. `{version}` in `DownloadURL` is replaced. When the download's name can't be worked out from the version, use `DownloadPath` instead: a dot path to the download URL in the same JSON (`releases.0.updateTo.url`). Use one or the other, not both. |
 | `AppStore` | — | Report only. |
@@ -108,7 +108,7 @@ A feed can be hijacked, or a vendor's site compromised. barkeep treats every dow
 untrusted until it proves it is the next version of the app that's installed:
 
 1. **HTTPS only**, redirects included, and no larger than `MaximumDownloadSizeMB`.
-2. **The feed's own checks.** A SHA-256 (Squirrel, GitHub) or SHA-512 (electron-builder) must
+2. **The feed's own checks.** A SHA-256 (VS Code's update API, GitHub) or SHA-512 (electron-builder) must
    match. An app with a Sparkle `SUPublicEDKey` only accepts a download carrying a valid EdDSA
    signature from that key, as Sparkle itself does.
 3. **Exactly the app expected.** The download must hold one app with the installed copy's bundle

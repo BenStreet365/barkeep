@@ -238,12 +238,34 @@ public struct UpdateFinder: Sendable {
         return candidates.max { score($0) < score($1) }
     }
 
-    // MARK: Squirrel (VS Code)
+    // MARK: Squirrel (VS Code and its forks)
 
+    /// VS Code's update API, or a static Squirrel.Mac JSON file. A `FeedURL` ending in `.json` is
+    /// read as the static file. Otherwise it is the update server: barkeep asks VS Code's API
+    /// first and, when that fails, the static file VS Code forks such as Kiro publish instead,
+    /// `<FeedURL>/<quality>/metadata-darwin-<arch>-<quality>.json`.
     func squirrel(_ app: InstalledApp, _ source: AppSourceDefinition) throws -> AvailableUpdate? {
         let base = (source.feedURL ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let platform = app.metadata.architectures == ["x86_64"] ? "darwin" : "darwin-arm64"
-        let url = "\(base)/api/update/\(platform)/\(source.channel ?? "stable")/latest"
+        if base.lowercased().hasSuffix(".json") { return try squirrelStatic(base) }
+        let quality = source.channel ?? "stable"
+        let intelOnly = app.metadata.architectures == ["x86_64"]
+        do {
+            return try squirrelAPI(base, platform: intelOnly ? "darwin" : "darwin-arm64", quality: quality)
+        } catch let apiError {
+            let file = "\(base)/\(quality)/metadata-darwin-\(intelOnly ? "x64" : "arm64")-\(quality).json"
+            do {
+                let update = try squirrelStatic(file)
+                log.debug("\(app.name): no VS Code update API at \(base) (\(apiError)); read \(file)")
+                return update
+            } catch {
+                throw BarkeepError(.feedError, "\(apiError). Nor as a VS Code fork: \(error)")
+            }
+        }
+    }
+
+    /// VS Code's API: `<base>/api/update/<platform>/<quality>/latest`, 204 when nothing is newer.
+    func squirrelAPI(_ base: String, platform: String, quality: String) throws -> AvailableUpdate? {
+        let url = "\(base)/api/update/\(platform)/\(quality)/latest"
         guard let parsedURL = URL(string: url) else { throw BarkeepError(.feedError, "\(url) is not a URL") }
         let (data, response) = try HTTPClient.get(parsedURL, maxBytes: Self.feedLimit, accepting: [200, 204],
                                                   allowFile: config.allowFileURLs)
@@ -258,6 +280,26 @@ public struct UpdateFinder: Sendable {
                                      releaseDate: (json["timestamp"] as? NSNumber).flatMap { DateParsing.fromEpoch($0.doubleValue) })
         update.sha256 = (json["sha256hash"] as? String)?.lowercased()
         return update
+    }
+
+    /// A static Squirrel.Mac file (Electron's `serverType: "json"`): `currentRelease` names the
+    /// newest entry in `releases`, whose `updateTo` has its `url` and `pub_date`. It carries no
+    /// checksum, so the download is trusted on its signature and notarisation alone.
+    func squirrelStatic(_ url: String) throws -> AvailableUpdate {
+        let (data, _) = try get(url)
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let current = json["currentRelease"] as? String, !current.isEmpty,
+              let releases = json["releases"] as? [[String: Any]] else {
+            throw BarkeepError(.feedError, "Unexpected response from \(url)")
+        }
+        guard let release = releases.first(where: { $0["version"] as? String == current }),
+              let updateTo = release["updateTo"] as? [String: Any],
+              let download = updateTo["url"] as? String, !download.isEmpty else {
+            throw BarkeepError(.feedError, "\(url) has no download for \(current)")
+        }
+        return AvailableUpdate(version: updateTo["version"] as? String ?? current,
+                               downloadURL: Self.resolve(download, against: url),
+                               releaseDate: updateTo["pub_date"].flatMap(DateParsing.parseAny))
     }
 
     // MARK: GitHub

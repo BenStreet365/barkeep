@@ -3,6 +3,15 @@
 Release notes for barkeep. The release workflow publishes the section for each version as its
 GitHub Release notes, so write them for admins.
 
+## 0.3.1
+
+### Fixed
+
+- VS Code forks that don't run VS Code's update API, such as Kiro, are updated. They showed
+  "Cannot check for updates" with HTTP 403. barkeep now falls back to the static update file
+  these apps read themselves. `Squirrel` entries in `AppSources` can also name such a file
+  directly with a `FeedURL` ending in `.json`.
+
 ## 0.3.0
 
 ### Added

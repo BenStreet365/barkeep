@@ -259,6 +259,47 @@ final class FeedTests: XCTestCase {
         XCTAssertEqual(update.releaseDate.map { Int($0.timeIntervalSince1970) }, 1792690529)
     }
 
+    /// A VS Code fork (Kiro) with no update API, only a static Squirrel.Mac file.
+    func testSquirrelStaticFeed() throws {
+        let fixtures = try Fixtures()
+        let base = try fixtures.folder("kiro")
+        let file = base.appendingPathComponent("stable/metadata-darwin-arm64-stable.json")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"""
+            {"currentRelease":"1.5.11","releases":[
+              {"version":"1.5.10","updateTo":{"version":"1.5.10","pub_date":"2026-11-13","url":"https://example.com/old.zip"}},
+              {"version":"1.5.11","updateTo":{"version":"1.5.11","pub_date":"2026-11-20","name":"Kiro-darwin-arm64-1.5.11",
+               "url":"https://example.com/signed/1.5.11/kiro-ide-1.5.11-stable-darwin-arm64.zip"}}]}
+            """#.utf8).write(to: file)
+        let finder = UpdateFinder(config: Fixtures.testConfiguration(), log: Fixtures.quietLog())
+        let installed = app(short: "1.5.0", build: "1.5.0")
+
+        // Detected from product.json: the API is missing, so the static file is read.
+        let server = AppSourceDefinition(bundleIdentifier: "x", kind: .squirrel, feedURL: base.absoluteString, channel: "stable")
+        let update = try XCTUnwrap(finder.latest(for: installed, source: server))
+        XCTAssertEqual(update.version, "1.5.11")
+        XCTAssertEqual(update.downloadURL, "https://example.com/signed/1.5.11/kiro-ide-1.5.11-stable-darwin-arm64.zip")
+        XCTAssertNil(update.sha256)
+        XCTAssertEqual(update.releaseDate.map { Int($0.timeIntervalSince1970) }, 1_795_132_800)
+
+        // A FeedURL naming the file itself.
+        let direct = AppSourceDefinition(bundleIdentifier: "x", kind: .squirrel, feedURL: file.absoluteString)
+        XCTAssertEqual(try finder.latest(for: installed, source: direct)?.version, "1.5.11")
+
+        // Neither the API nor the file: the error names both.
+        let missing = AppSourceDefinition(bundleIdentifier: "x", kind: .squirrel,
+                                          feedURL: base.appendingPathComponent("nothing").absoluteString, channel: "stable")
+        XCTAssertThrowsError(try finder.latest(for: installed, source: missing)) { error in
+            XCTAssertTrue("\(error)".contains("api/update/darwin-arm64/stable/latest"), "\(error)")
+            XCTAssertTrue("\(error)".contains("metadata-darwin-arm64-stable.json"), "\(error)")
+        }
+
+        // currentRelease with no matching entry is refused rather than guessed.
+        try Data(#"{"currentRelease":"9.9.9","releases":[{"version":"1.5.11","updateTo":{"url":"https://example.com/a.zip"}}]}"#.utf8)
+            .write(to: file)
+        XCTAssertThrowsError(try finder.latest(for: installed, source: direct))
+    }
+
     func testDates() {
         XCTAssertNotNil(DateParsing.parse("Tue, 20 Oct 2026 10:00:00 +0000"))
         XCTAssertNotNil(DateParsing.parse("Tue, 20 Oct 2026 10:00:00 GMT"))

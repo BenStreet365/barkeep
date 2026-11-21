@@ -72,6 +72,7 @@ What to check, with old versions of real apps (all public downloads):
 |---|---|
 | Catalog JSON source, DMG | Firefox 150.0 from `download-installer.cdn.mozilla.net`; `barkeep run --check-feeds` |
 | Squirrel API, zip, SHA-256 | VS Code from `update.code.visualstudio.com/1.100.0/darwin-arm64/stable` |
+| Static Squirrel file, no checksum | An older Kiro from `prod.download.desktop.kiro.dev/releases/stable/darwin-arm64/signed/<version>/` |
 | Sparkle with EdDSA, `~/Applications`, helper as the user | Rectangle 2.0.1 DMG from its GitHub releases, copied into `~/Applications` |
 | Installer package | Rectangle 2.0.1 `Rectangle.pkg`, then an `AppSources` GitHub entry with `AssetPattern` `\.pkg$` |
 | Fake update | Copy an app, change its version, re-sign ad hoc, serve it through a `JSON` source with `AllowFileURLs`: refused (ad hoc), and with `AllowUnverifiedSignatures` still refused (team) |
