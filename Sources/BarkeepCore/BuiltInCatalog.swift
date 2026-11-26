@@ -4,6 +4,9 @@ import Foundation
 /// whose built-in updater barkeep cannot use). Each entry pins the vendor's Team ID. A profile's
 /// `AppSources` entry for the same bundle ID replaces the one here.
 ///
+/// Apps barkeep must not update are listed with `Type` `None` and a `note` saying why. They show
+/// as not supported rather than as an unknown source.
+///
 /// Apps that ship a Sparkle feed, an electron-builder `app-update.yml` or a VS Code style
 /// `product.json` need no entry: barkeep reads those from the app.
 public enum BuiltInCatalog {
@@ -95,6 +98,12 @@ public enum BuiltInCatalog {
             bundleIdentifier: "uk.street365.decant.app", kind: .gitHub,
             repository: "BenStreet365/decant", assetPattern: "^decant-full-.*\\.pkg$",
             expectedTeamIdentifier: "Y633696656"),
+    ] + unsupported
+
+    /// Apps barkeep explicitly does not support. Each says why in `note`, which admins see.
+    public static let unsupported: [AppSourceDefinition] = [
+        AppSourceDefinition(bundleIdentifier: "io.island.island", kind: .none,
+                            note: "Island manages its own updates"),
     ]
 
     public static func entry(for bundleID: String) -> AppSourceDefinition? {

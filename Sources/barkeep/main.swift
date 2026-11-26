@@ -41,6 +41,7 @@ EXIT CODES:
   11 app not found
   12 app excluded by the profile
   13 barkeep does not know how this app updates; add it to AppSources
+  14 barkeep does not support this app
   20 update feed could not be read
   21 download could not be opened or does not hold the app
   22 invalid or missing code signature
@@ -329,6 +330,7 @@ func run() -> Int32 {
             case .coolingOff?: return ExitStatus.deferred.rawValue
             case .waitingForQuit?, .closingSoon?: return ExitStatus.appRunning.rawValue
             case .noSource?: return ExitStatus.noUpdateSource.rawValue
+            case .unsupported?: return ExitStatus.appUnsupported.rawValue
             case nil: return ExitStatus.appNotFound.rawValue
             default: return ExitStatus.success.rawValue
             }

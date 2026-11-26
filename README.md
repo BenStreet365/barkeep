@@ -66,12 +66,17 @@ this order:
 |---|---|---|
 | **Your profile** | `AppSources` | Whatever you tell it (any type below). Always wins. |
 | **Mac App Store** | `Contents/_MASReceipt` | The App Store's version, for reporting. The App Store (or your MDM's VPP) installs it. |
-| **barkeep's catalog** | Bundle ID | Built-in sources for Chrome, Firefox, Zoom, Slack, Discord, Docker Desktop, VS Code, ChatGPT, Claude, Tailscale, Obsidian, UTM, balenaEtcher, Thonny, Bambu Studio, Raspberry Pi Imager, Mullvad Browser and Decant, each pinned to the vendor's Team ID. |
+| **barkeep's catalog** | Bundle ID | Built-in sources for Chrome, Firefox, Zoom, Slack, Discord, Docker Desktop, VS Code, ChatGPT, Claude, Tailscale, Obsidian, UTM, balenaEtcher, Thonny, Bambu Studio, Raspberry Pi Imager, Mullvad Browser and Decant, each pinned to the vendor's Team ID. It also lists apps barkeep does not support (see below). |
 | **Sparkle** | `SUFeedURL` in Info.plist | The appcast, with the EdDSA signature the app's `SUPublicEDKey` expects. Skips beta channels, informational items, deltas and items for newer macOS. |
 | **Squirrel (VS Code style)** | `updateUrl` in `Resources/app/product.json` | `<updateUrl>/api/update/darwin-arm64/<quality>/latest`, with its SHA-256. VS Code forks without that API (Kiro) publish a static file instead, `<updateUrl>/<quality>/metadata-darwin-arm64-<quality>.json`, which barkeep reads when the API isn't there. That file has no checksum, so those updates rely on the signature and notarisation checks in "How barkeep stops fake updates". |
 | **electron-builder** | `Resources/app-update.yml` | `latest-mac.yml` from GitHub, a generic URL or S3, with its SHA-512 and release date. |
 | **The vendor's updater** | Bundle ID | Microsoft AutoUpdate and Adobe Creative Cloud apps are reported, not updated: their updaters are made for this and fighting them helps nobody. Exclude them, or replace with an `AppSources` entry. |
 | **Apple** | `com.apple.*` | Left to Software Update and the App Store. |
+
+Apps barkeep does not support, such as Island (the enterprise browser), show as **Not supported**
+with the reason, and barkeep leaves them alone: their vendors manage updates in ways barkeep must
+not interfere with. `barkeep update` exits with 14 for them. An `AppSources` entry for the same
+bundle ID overrides this, at your own risk.
 
 Anything else shows as **Unknown source**. Many Sparkle apps set their feed in code rather than
 in Info.plist; barkeep can see Sparkle is there and says so. To cover such an app, add it to
@@ -408,6 +413,7 @@ on their own. Turn `AutomaticSelfUpdates` off to ship barkeep through your MDM i
 | 11 | App not found |
 | 12 | App excluded by the profile |
 | 13 | barkeep doesn't know how this app updates; add it to `AppSources` |
+| 14 | barkeep doesn't support this app, and leaves it alone |
 | 20 | The update feed couldn't be read |
 | 21 | The download couldn't be opened, or doesn't hold the app |
 | 22 | Invalid or missing code signature, or ad hoc |

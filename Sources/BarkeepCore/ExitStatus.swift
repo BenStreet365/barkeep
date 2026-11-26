@@ -14,6 +14,8 @@ public enum ExitStatus: Int32, Sendable, Codable {
     case appExcluded = 12
     /// Barkeep does not know how this app updates. Add it to `AppSources` in the profile.
     case noUpdateSource = 13
+    /// Barkeep's catalog lists the app as not supported: barkeep leaves it alone.
+    case appUnsupported = 14
 
     /// The update feed could not be downloaded or read.
     case feedError = 20

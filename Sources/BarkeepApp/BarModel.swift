@@ -38,7 +38,7 @@ final class BarModel {
 
     var summary: String {
         guard let state else { return "Barkeep's service hasn't reported yet" }
-        let monitored = state.apps.filter { ![.excluded, .apple, .noSource].contains($0.status) }.count
+        let monitored = state.apps.filter { ![.excluded, .unsupported, .apple, .noSource].contains($0.status) }.count
         switch waiting.count {
         case 0: return "All \(monitored) monitored apps are up to date"
         case 1: return "1 update waiting"
@@ -129,6 +129,7 @@ extension AppStatus {
         switch self {
         case .upToDate: "Up to date"
         case .excluded: "Excluded"
+        case .unsupported: "Not supported"
         case .apple: "Apple"
         case .noSource: "Unknown source"
         case .managedElsewhere: "Updated elsewhere"
@@ -145,6 +146,7 @@ extension AppStatus {
         switch self {
         case .upToDate, .updated: "checkmark.circle.fill"
         case .excluded: "minus.circle"
+        case .unsupported: "nosign"
         case .apple: "apple.logo"
         case .noSource: "questionmark.circle"
         case .managedElsewhere: "arrow.triangle.2.circlepath"

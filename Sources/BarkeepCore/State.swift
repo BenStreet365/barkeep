@@ -6,6 +6,8 @@ public enum AppStatus: String, Codable, Sendable, CaseIterable {
     case upToDate
     /// Excluded by the profile.
     case excluded
+    /// barkeep's catalog lists the app as one barkeep does not support. `message` says why.
+    case unsupported
     /// Apple's own app, updated by Software Update.
     case apple
     /// Barkeep doesn't know where its updates come from.

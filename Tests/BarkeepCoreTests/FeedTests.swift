@@ -235,8 +235,16 @@ final class FeedTests: XCTestCase {
         var seen = Set<String>()
         for entry in BuiltInCatalog.entries {
             XCTAssertNoThrow(try entry.validate(), entry.bundleIdentifier)
-            XCTAssertNotNil(entry.expectedTeamIdentifier, "\(entry.bundleIdentifier) must pin a Team ID")
+            if entry.kind == .none {
+                XCTAssertNotNil(entry.note, "\(entry.bundleIdentifier) must say why it is not supported")
+            } else {
+                XCTAssertNotNil(entry.expectedTeamIdentifier, "\(entry.bundleIdentifier) must pin a Team ID")
+            }
             XCTAssertTrue(seen.insert(entry.bundleIdentifier.lowercased()).inserted, "\(entry.bundleIdentifier) is listed twice")
+        }
+        for entry in BuiltInCatalog.unsupported {
+            XCTAssertEqual(entry.kind, .none, "\(entry.bundleIdentifier) is listed as unsupported with a source")
+            XCTAssertEqual(BuiltInCatalog.entry(for: entry.bundleIdentifier), entry)
         }
         XCTAssertEqual(BuiltInCatalog.entry(for: "MD.OBSIDIAN")?.repository, "obsidianmd/obsidian-releases")
         let assets = ["obsidian-1.14.5-arm64.tar.gz", "obsidian-1.14.5.asar.gz", "Obsidian-1.14.5.dmg", "obsidian-1.14.5.tar.gz"]

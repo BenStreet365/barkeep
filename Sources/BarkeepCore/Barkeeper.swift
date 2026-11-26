@@ -297,6 +297,9 @@ public final class Barkeeper {
             record.lastFailure = nil
         }
         record.source = source
+        if source.definition.kind == .none, source.origin == .catalog {
+            return set(&record, .unsupported, "\(app.name) is not supported by barkeep: \(source.definition.note ?? "it must not be updated by barkeep")")
+        }
         if source.definition.kind == .none {
             return set(&record, .excluded, "\(app.name) is not managed (AppSources sets it to None)")
         }

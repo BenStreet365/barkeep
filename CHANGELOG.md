@@ -3,6 +3,17 @@
 Release notes for barkeep. The release workflow publishes the section for each version as its
 GitHub Release notes, so write them for admins.
 
+## 0.4.0
+
+### Added
+
+- Apps barkeep can't update show as **Not supported**, with the reason, and barkeep leaves them
+  alone. The first is Island, the enterprise browser (`io.island.island`), which manages its own
+  updates. This list will grow over time. Some apps can't be updated automatically, for example
+  because their downloads need a sign-in. An `AppSources` entry for the same bundle ID overrides
+  the list, at your own risk.
+- Exit code 14: `barkeep update` was asked to update an app barkeep doesn't support.
+
 ## 0.3.1
 
 ### Fixed

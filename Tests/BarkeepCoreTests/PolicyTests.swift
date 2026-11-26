@@ -115,6 +115,27 @@ final class SourceResolverTests: XCTestCase {
         XCTAssertEqual(resolved?.definition.channel, "stable")
     }
 
+    func testUnsupported() {
+        let barkeeper = Barkeeper(config: Configuration(), log: Fixtures.quietLog())
+        for entry in BuiltInCatalog.unsupported {
+            // Even an app that carries its own feed is left alone.
+            let installed = app(entry.bundleIdentifier) { $0.sparkleFeedURL = "https://e/a.xml" }
+            XCTAssertEqual(SourceResolver.resolve(installed, config: Configuration()).0?.origin, .catalog)
+            var record = AppRecord(app: installed, status: .upToDate, message: "")
+            var state = State()
+            barkeeper.evaluate(&record, options: CycleOptions(), state: &state, records: [record])
+            XCTAssertEqual(record.status, .unsupported, entry.bundleIdentifier)
+            XCTAssertTrue(record.message.contains(entry.note ?? "?"), record.message)
+        }
+        // None from the profile is the admin's choice, not barkeep's: excluded, not unsupported.
+        var config = Configuration()
+        config.appSources = [AppSourceDefinition(bundleIdentifier: "com.example", kind: .none)]
+        var record = AppRecord(app: app("com.example"), status: .upToDate, message: "")
+        var state = State()
+        Barkeeper(config: config, log: Fixtures.quietLog()).evaluate(&record, options: CycleOptions(), state: &state, records: [record])
+        XCTAssertEqual(record.status, .excluded)
+    }
+
     func testVendorAndUnknown() {
         XCTAssertEqual(SourceResolver.resolve(app("com.microsoft.Word"), config: Configuration()).0?.definition.kind, .vendor)
         let (none, why) = SourceResolver.resolve(app("com.example.mystery") { $0.hasSparkleFramework = true }, config: Configuration())
